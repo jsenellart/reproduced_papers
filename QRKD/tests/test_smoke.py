@@ -1,6 +1,6 @@
 import torch
 
-from QRKD.lib.models import TeacherCNN, StudentCNN
+from QRKD.lib.models import StudentCNN, TeacherCNN
 
 
 def test_smoke_shapes():

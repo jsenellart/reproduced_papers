@@ -1,8 +1,8 @@
 """Training and evaluation loops to reproduce MNIST classical baselines (KD, RKD, QRKD classical parts)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
@@ -28,7 +28,7 @@ def train_student(
     test_loader: DataLoader,
     cfg: TrainConfig,
     weights: QRKDWeights,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     device = torch.device(cfg.device)
     student.to(device)
     teacher.to(device)
@@ -58,7 +58,9 @@ def train_student(
         student.train()
         iterator = train_loader
         if cfg.verbose:
-            iterator = tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg.epochs}", leave=False)
+            iterator = tqdm(
+                train_loader, desc=f"Epoch {epoch + 1}/{cfg.epochs}", leave=False
+            )
         for x, y in iterator:
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
@@ -79,13 +81,19 @@ def train_student(
                 avg_loss = total_loss / max(n_batches, 1)
                 avg_task = total_task / max(n_batches, 1)
                 avg_rkd = total_rkd / max(n_batches, 1)
-                iterator.set_postfix(loss=f"{avg_loss:.4f}", task=f"{avg_task:.4f}", distill=f"{avg_rkd:.4f}")
+                iterator.set_postfix(
+                    loss=f"{avg_loss:.4f}",
+                    task=f"{avg_task:.4f}",
+                    distill=f"{avg_rkd:.4f}",
+                )
 
         if cfg.verbose and n_batches > 0:
             avg_loss = total_loss / n_batches
             avg_task = total_task / n_batches
             avg_rkd = total_rkd / n_batches
-            print(f"Epoch {epoch+1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})")
+            print(
+                f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})"
+            )
 
     acc = evaluate(student, test_loader)
     return {"test_acc": acc}

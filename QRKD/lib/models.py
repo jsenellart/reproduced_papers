@@ -1,9 +1,10 @@
 """Teacher/Student CNNs for MNIST used in the paper (parameter counts approximated)."""
+
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
 
 
 class SmallCNN(nn.Module):
@@ -18,13 +19,13 @@ class SmallCNN(nn.Module):
         self.head = nn.Linear(fc, 10)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool(F.relu(self.conv2(x)))
-        # 28x28 -> pool -> 14x14 -> conv no size change -> pool -> 7x7 (if we had two pools) 
+        x = f.relu(self.conv1(x))
+        x = self.pool(f.relu(self.conv2(x)))
+        # 28x28 -> pool -> 14x14 -> conv no size change -> pool -> 7x7 (if we had two pools)
         # here only one pool; ensure shape to 7x7 by additional pool
         x = self.pool(x)
         feat = torch.flatten(x, 1)
-        feat = F.relu(self.fc1(feat))
+        feat = f.relu(self.fc1(feat))
         logits = self.head(feat)
         return logits, feat
 

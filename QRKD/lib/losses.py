@@ -1,18 +1,22 @@
 """KD and RKD (distance & angle) classical losses for MNIST reproduction."""
-from __future__ import annotations
 
-from typing import Tuple
+from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
 
 
-def kd_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor, T: float = 4.0, alpha: float = 0.5) -> torch.Tensor:
+def kd_loss(
+    student_logits: torch.Tensor,
+    teacher_logits: torch.Tensor,
+    t: float = 4.0,
+    alpha: float = 0.5,
+) -> torch.Tensor:
     """Standard KD with temperature T and mixing alpha (Hinton et al.)."""
-    p_s = F.log_softmax(student_logits / T, dim=1)
-    p_t = F.softmax(teacher_logits / T, dim=1)
-    loss_kd = F.kl_div(p_s, p_t, reduction="batchmean") * (T * T)
+    p_s = f.log_softmax(student_logits / t, dim=1)
+    p_t = f.softmax(teacher_logits / t, dim=1)
+    loss_kd = f.kl_div(p_s, p_t, reduction="batchmean") * (t * t)
     return alpha * loss_kd
 
 
@@ -24,16 +28,20 @@ def pairwise_distances(x: torch.Tensor) -> torch.Tensor:
     return torch.sqrt(dist2)
 
 
-def rkd_distance_loss(student_feat: torch.Tensor, teacher_feat: torch.Tensor) -> torch.Tensor:
+def rkd_distance_loss(
+    student_feat: torch.Tensor, teacher_feat: torch.Tensor
+) -> torch.Tensor:
     sd = pairwise_distances(student_feat)
     td = pairwise_distances(teacher_feat)
     # Normalize by mean to stabilize
     sd = sd / (sd.mean() + 1e-8)
     td = td / (td.mean() + 1e-8)
-    return F.smooth_l1_loss(sd, td)
+    return f.smooth_l1_loss(sd, td)
 
 
-def rkd_angle_loss(student_feat: torch.Tensor, teacher_feat: torch.Tensor) -> torch.Tensor:
+def rkd_angle_loss(
+    student_feat: torch.Tensor, teacher_feat: torch.Tensor
+) -> torch.Tensor:
     def angles(x: torch.Tensor) -> torch.Tensor:
         # Centered differences: (x_i - x_j) normalized
         diffs = x.unsqueeze(0) - x.unsqueeze(1)  # (N, N, D)
@@ -46,7 +54,7 @@ def rkd_angle_loss(student_feat: torch.Tensor, teacher_feat: torch.Tensor) -> to
 
     sa = angles(student_feat)
     ta = angles(teacher_feat)
-    return F.smooth_l1_loss(sa, ta)
+    return f.smooth_l1_loss(sa, ta)
 
 
 class QRKDWeights(nn.Module):

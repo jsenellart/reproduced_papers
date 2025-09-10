@@ -47,6 +47,13 @@ python implementation.py --task student_kd --dataset mnist --epochs 1 --seed 0 \
 
 # Optional: reduce logs
 python implementation.py --task student_qrkd --epochs 5 --quiet --teacher-path models/mnist_teacher_seed0_e5.pt
+
+# Quick check runs (faster dev loop)
+# Use --checkrun to limit each epoch to 50 batches.
+# Saved files get a suffix _chk (e.g., mnist_teacher_seed0_e1_chk.pt)
+python implementation.py --task teacher --epochs 1 --checkrun
+python implementation.py --task student_scratch --epochs 1 --checkrun \
+	--teacher-path models/mnist_teacher_seed0_e1_chk.pt
 ```
 
 Notes:

@@ -216,7 +216,8 @@ def main():
         )
         model = TeacherCNN()
         teacher = train_teacher(model, train_loader, tcfg)
-        fname = f"{args.dataset}_teacher_seed{args.seed}_e{args.epochs}.pt"
+        chk = "_chk" if args.checkrun else ""
+        fname = f"{args.dataset}_teacher_seed{args.seed}_e{args.epochs}{chk}.pt"
         path = save_model(teacher, args.save_dir, fname)
         print(f"Saved teacher to {path}")
         return
@@ -262,7 +263,8 @@ def main():
         weights,
     )
 
-    fname = f"{args.dataset}_student-{variant}_seed{args.seed}_e{args.epochs}.pt"
+    chk = "_chk" if args.checkrun else ""
+    fname = f"{args.dataset}_student-{variant}_seed{args.seed}_e{args.epochs}{chk}.pt"
     path = save_model(student, args.save_dir, fname)
     print(f"Saved student to {path}")
     print(f"Test accuracy: {results['test_acc']:.2f}%")

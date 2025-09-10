@@ -57,7 +57,8 @@ class QRKDWeights(nn.Module):
         self.ar = ar
 
     def forward(self, logits_s, logits_t, feat_s, feat_t):
-        loss = 0.0
+        # Always return a Tensor (even if all weights are zero)
+        loss = torch.zeros((), device=logits_s.device)
         if self.kd:
             loss = loss + self.kd * kd_loss(logits_s, logits_t)
         if self.dr:

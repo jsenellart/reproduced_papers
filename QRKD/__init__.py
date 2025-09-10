@@ -1,1 +1,0 @@
-"""QRKD reproduction package."""

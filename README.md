@@ -26,10 +26,6 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
-Notes:
-- PyTorch/torchvision wheels are platform-specific; if installation fails, follow the official selector at https://pytorch.org/get-started/locally/
-- Apple Silicon (MPS) is supported by recent PyTorch releases; CPU-only also works for MNIST examples.
-
 ## How to contribute a reproduced paper
 
 We encourage contributions of new quantum ML paper reproductions. Please follow the guidelines below:

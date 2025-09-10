@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 from .losses import QRKDWeights
 
@@ -17,6 +18,7 @@ class TrainConfig:
     epochs: int = 10
     lr: float = 1e-3
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    verbose: bool = True
 
 
 def train_student(
@@ -48,9 +50,16 @@ def train_student(
                 total += y.size(0)
         return correct / total * 100.0
 
-    for _ in range(cfg.epochs):
+    for epoch in range(cfg.epochs):
+        total_loss = 0.0
+        total_task = 0.0
+        total_rkd = 0.0
+        n_batches = 0
         student.train()
-        for x, y in train_loader:
+        iterator = train_loader
+        if cfg.verbose:
+            iterator = tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg.epochs}", leave=False)
+        for x, y in iterator:
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
                 logits_t, feat_t = teacher(x)
@@ -61,6 +70,22 @@ def train_student(
             opt.zero_grad()
             loss.backward()
             opt.step()
+            # accumulate metrics
+            total_loss += loss.item()
+            total_task += loss_task.item()
+            total_rkd += loss_rkd.item()
+            n_batches += 1
+            if cfg.verbose:
+                avg_loss = total_loss / max(n_batches, 1)
+                avg_task = total_task / max(n_batches, 1)
+                avg_rkd = total_rkd / max(n_batches, 1)
+                iterator.set_postfix(loss=f"{avg_loss:.4f}", task=f"{avg_task:.4f}", distill=f"{avg_rkd:.4f}")
+
+        if cfg.verbose and n_batches > 0:
+            avg_loss = total_loss / n_batches
+            avg_task = total_task / n_batches
+            avg_rkd = total_rkd / n_batches
+            print(f"Epoch {epoch+1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})")
 
     acc = evaluate(student, test_loader)
     return {"test_acc": acc}

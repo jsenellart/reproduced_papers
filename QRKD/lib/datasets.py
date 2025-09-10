@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
+import os
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
@@ -13,7 +14,8 @@ from torchvision import datasets, transforms
 class DataConfig:
     batch_size: int = 64
     num_workers: int = 2
-    root: str = "./QRKD/data"
+    # Default to <repo_root>/QRKD/data regardless of current working directory
+    root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 
 
 def mnist_loaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader]:
@@ -21,8 +23,9 @@ def mnist_loaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader]:
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,)),
     ])
-    train = datasets.MNIST(cfg.root, train=True, download=True, transform=tfm)
-    test = datasets.MNIST(cfg.root, train=False, download=True, transform=tfm)
+    data_root = os.path.abspath(os.path.expanduser(cfg.root))
+    train = datasets.MNIST(data_root, train=True, download=True, transform=tfm)
+    test = datasets.MNIST(data_root, train=False, download=True, transform=tfm)
     train_loader = DataLoader(train, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers)
     test_loader = DataLoader(test, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers)
     return train_loader, test_loader

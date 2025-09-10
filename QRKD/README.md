@@ -30,11 +30,28 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
-Quick run (short training for a fast check):
+Command-line usage (train one model at a time):
 
 ```bash
-QRKD_TEACHER_EPOCHS=1 QRKD_EPOCHS=1 python -c "from QRKD.implementation import run; run()"
+# Train a teacher for 1 epoch and save it under models/
+python implementation.py --task teacher --dataset mnist --epochs 1 --seed 0 --save-dir models
+
+# Train a student with KD using the saved teacher
+python implementation.py --task student_kd --dataset mnist --epochs 1 --seed 0 \
+	--teacher-path models/mnist_teacher_seed0_e1.pt --save-dir models
+
+# Other variants
+# - student_scratch: student trained only with cross-entropy (no distillation)
+# - student_rkd: student trained with RKD (distance+angle) only
+# - student_qrkd: student trained with KD + RKD (classical part of QRKD)
+
+# Optional: reduce logs
+python implementation.py --task student_qrkd --epochs 5 --quiet --teacher-path models/mnist_teacher_seed0_e5.pt
 ```
+
+Notes:
+- `student_scratch` uses only the task loss (CrossEntropy) without any distillation.
+- `student_kd` adds a KL-based knowledge distillation term on logits (no RKD).
 
 Notebook:
 

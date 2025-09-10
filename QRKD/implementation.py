@@ -188,6 +188,11 @@ def main():
     parser.add_argument(
         "--quiet", action="store_true", help="Reduce training logs (default: verbose)"
     )
+    parser.add_argument(
+        "--checkrun",
+        action="store_true",
+        help="Limit to 50 batches per epoch for quick training checks",
+    )
 
     args = parser.parse_args()
 
@@ -202,12 +207,15 @@ def main():
     # nothing
 
     if args.task == "teacher":
-        teacher = _train_teacher_wrapper(
-            train_loader,
+        # Build TrainConfig for teacher
+        tcfg = TrainConfig(
             epochs=args.epochs,
             lr=args.lr,
             verbose=not args.quiet,
+            max_batches=50 if args.checkrun else None,
         )
+        model = TeacherCNN()
+        teacher = train_teacher(model, train_loader, tcfg)
         fname = f"{args.dataset}_teacher_seed{args.seed}_e{args.epochs}.pt"
         path = save_model(teacher, args.save_dir, fname)
         print(f"Saved teacher to {path}")
@@ -245,7 +253,12 @@ def main():
         teacher,
         train_loader,
         test_loader,
-        TrainConfig(epochs=args.epochs, lr=args.lr, verbose=not args.quiet),
+        TrainConfig(
+            epochs=args.epochs,
+            lr=args.lr,
+            verbose=not args.quiet,
+            max_batches=50 if args.checkrun else None,
+        ),
         weights,
     )
 

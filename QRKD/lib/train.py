@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from .losses import QRKDWeights
+from .utils import count_parameters
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TrainConfig:
     lr: float = 1e-3
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     verbose: bool = True
+    max_batches: int | None = None
 
 
 def train_teacher(
@@ -33,6 +35,10 @@ def train_teacher(
     model.to(device)
     opt = Adam(model.parameters(), lr=cfg.lr)
     ce = nn.CrossEntropyLoss()
+    if cfg.verbose:
+        print(f"[Teacher] Params: {count_parameters(model):,}")
+        if cfg.max_batches is not None:
+            print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
     for epoch in range(cfg.epochs):
         total_loss = 0.0
@@ -43,7 +49,7 @@ def train_teacher(
             iterator = tqdm(
                 train_loader, desc=f"Epoch {epoch + 1}/{cfg.epochs}", leave=False
             )
-        for x, y in iterator:
+        for batch_idx, (x, y) in enumerate(iterator, 1):
             x, y = x.to(device), y.to(device)
             logits, _ = model(x)
             loss = ce(logits, y)
@@ -55,6 +61,8 @@ def train_teacher(
             if cfg.verbose:
                 avg_loss = total_loss / max(n_batches, 1)
                 iterator.set_postfix(loss=f"{avg_loss:.4f}")
+            if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
+                break
         if cfg.verbose and n_batches > 0:
             print(
                 f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {total_loss / n_batches:.4f}"
@@ -76,6 +84,12 @@ def train_student(
     student.to(device)
     teacher.to(device)
     teacher.eval()
+    if cfg.verbose:
+        print(
+            f"[Student] Params: {count_parameters(student):,} | Teacher Params: {count_parameters(teacher):,}"
+        )
+        if cfg.max_batches is not None:
+            print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
     opt = Adam(student.parameters(), lr=cfg.lr)
     ce = nn.CrossEntropyLoss()
@@ -104,7 +118,7 @@ def train_student(
             iterator = tqdm(
                 train_loader, desc=f"Epoch {epoch + 1}/{cfg.epochs}", leave=False
             )
-        for x, y in iterator:
+        for batch_idx, (x, y) in enumerate(iterator, 1):
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
                 logits_t, feat_t = teacher(x)
@@ -129,6 +143,8 @@ def train_student(
                     task=f"{avg_task:.4f}",
                     distill=f"{avg_rkd:.4f}",
                 )
+            if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
+                break
 
         if cfg.verbose and n_batches > 0:
             avg_loss = total_loss / n_batches

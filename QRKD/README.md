@@ -1,4 +1,4 @@
-# QRKD: Quantum Random Kitchen Directions (Reproduction)
+# QRKD: Quantum Relational Knowledge Distillation (Reproduction)
 
 This folder contains the reproduction of the paper:
 

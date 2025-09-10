@@ -1,13 +1,14 @@
-import numpy as np
+import torch
 
-from QRKD.implementation import HyperParams, QRKDModel
+from QRKD.lib.models import TeacherCNN, StudentCNN
 
 
 def test_smoke_shapes():
-    hp = HyperParams(n_features=16, n_layers=1)
-    model = QRKDModel(hp)
-    x = np.random.randn(4, 3)
-    y = (x.sum(axis=1) > 0).astype(int)
-    model.fit(x, y)
-    preds = model.predict(x)
-    assert preds.shape[0] == x.shape[0]
+    model_t = TeacherCNN()
+    model_s = StudentCNN()
+    x = torch.randn(2, 1, 28, 28)
+    logits_t, feat_t = model_t(x)
+    logits_s, feat_s = model_s(x)
+    assert logits_t.shape == (2, 10)
+    assert logits_s.shape == (2, 10)
+    assert feat_t.ndim == 2 and feat_s.ndim == 2

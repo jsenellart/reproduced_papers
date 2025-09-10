@@ -1,67 +1,120 @@
-"""
-QRKD reproduction core implementation.
+"""Implementation entrypoint to reproduce MNIST classical results from QRKD paper.
 
-Contract:
-- Inputs: dataset (features x labels), hyperparameters.
-- Outputs: kernel approximations / predictions, metrics.
-- Errors: invalid shapes, missing params, unsupported backends.
+This script trains a teacher CNN, then trains a student with:
+- From scratch (no distillation)
+- KD (logit matching)
+- RKD (distance + angle)
+- QRKD (classical components only: KD + RKD; quantum part excluded for now)
 
-Note: This is a scaffold file; fill in with the paper-specific logic.
+It reports a compact summary similar to Table 1 (test accuracy only here).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Dict
 
-import numpy as np
+import torch
+
+from .lib.datasets import DataConfig, mnist_loaders
+from .lib.models import TeacherCNN, StudentCNN
+from .lib.losses import QRKDWeights, kd_loss, rkd_distance_loss, rkd_angle_loss
+from .lib.train import TrainConfig, train_student
+from .lib.utils import set_seed
 
 
 @dataclass
-class HyperParams:
+class ExpConfig:
     seed: int = 0
-    n_features: int = 256
-    n_layers: int = 2
-    # TODO: add QRKD-specific hyperparameters here
+    epochs: int = 10
+    lr: float = 1e-3
+    batch_size: int = 64
 
 
-def set_seed(seed: int) -> None:
-    np.random.seed(seed)
+def train_teacher(train_loader, test_loader, epochs: int = 5, lr: float = 1e-3) -> TeacherCNN:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = TeacherCNN().to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    ce = torch.nn.CrossEntropyLoss()
+    for _ in range(epochs):
+        model.train()
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+            logits, _ = model(x)
+            loss = ce(logits, y)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+    return model.eval()
 
 
-class QRKDModel:
-    def __init__(self, hp: HyperParams) -> None:
-        self.hp = hp
-        set_seed(hp.seed)
-        # TODO: initialize QRKD components
+def run() -> Dict[str, float]:
+    cfg = ExpConfig()
+    set_seed(cfg.seed)
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> None:
-        """Fit model if needed (for pure random features may be noop)."""
-        # TODO: training logic (if applicable)
-        return None
+    dcfg = DataConfig(batch_size=cfg.batch_size)
+    train_loader, test_loader = mnist_loaders(dcfg)
 
-    def transform(self, x: np.ndarray) -> np.ndarray:
-        """Map inputs to QRKD random features."""
-        # TODO: feature map based on paper
-        return x
+    # 1) Train teacher quickly (could be pre-trained in practice)
+    teacher = train_teacher(train_loader, test_loader, epochs=5, lr=cfg.lr)
 
-    def predict(self, x: np.ndarray) -> np.ndarray:
-        """Predict using linear readout or kernel trick."""
-        z = self.transform(x)
-        # TODO: add linear head / ridge regression, return predictions
-        return z.mean(axis=1, keepdims=True)
+    # 2) Student from scratch (task loss only)
+    student_scratch = StudentCNN()
+    res_scratch = train_student(
+        student_scratch,
+        teacher,
+        train_loader,
+        test_loader,
+        TrainConfig(epochs=cfg.epochs, lr=cfg.lr),
+        QRKDWeights(kd=0.0, dr=0.0, ar=0.0),
+    )
 
+    # 3) KD only
+    student_kd = StudentCNN()
+    res_kd = train_student(
+        student_kd,
+        teacher,
+        train_loader,
+        test_loader,
+        TrainConfig(epochs=cfg.epochs, lr=cfg.lr),
+        QRKDWeights(kd=0.5, dr=0.0, ar=0.0),
+    )
 
-def main() -> None:
-    # Minimal smoke test
-    hp = HyperParams()
-    model = QRKDModel(hp)
-    x = np.random.randn(8, 4)
-    y = (x.sum(axis=1) > 0).astype(int)
-    model.fit(x, y)
-    preds = model.predict(x)
-    print("Preds shape:", preds.shape)
+    # 4) RKD (distance + angle)
+    student_rkd = StudentCNN()
+    res_rkd = train_student(
+        student_rkd,
+        teacher,
+        train_loader,
+        test_loader,
+        TrainConfig(epochs=cfg.epochs, lr=cfg.lr),
+        QRKDWeights(kd=0.0, dr=0.1, ar=0.1),
+    )
+
+    # 5) QRKD classical (KD + RKD). Quantum loss will be added later.
+    student_qrkd = StudentCNN()
+    res_qrkd = train_student(
+        student_qrkd,
+        teacher,
+        train_loader,
+        test_loader,
+        TrainConfig(epochs=cfg.epochs, lr=cfg.lr),
+        QRKDWeights(kd=0.5, dr=0.1, ar=0.1),
+    )
+
+    summary = {
+        "F. Scratch": res_scratch["test_acc"],
+        "KD": res_kd["test_acc"],
+        "RKD": res_rkd["test_acc"],
+        "QRKD (classical)": res_qrkd["test_acc"],
+    }
+
+    print("MNIST Test Accuracy (%)")
+    for k, v in summary.items():
+        print(f"{k:>16}: {v:5.2f}")
+
+    return summary
 
 
 if __name__ == "__main__":
-    main()
+    run()

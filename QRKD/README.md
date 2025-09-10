@@ -2,7 +2,7 @@
 
 This folder contains the reproduction of the paper:
 
-- Title: Quantum Random Kitchen Directions
+- Title: Quantum Relational Knowledge Distillation
 - arXiv: https://arxiv.org/abs/2508.13054
 
 ## Overview
@@ -19,8 +19,8 @@ This reproduction follows the guidelines from the repository README and the MerL
 
 ## How to run
 
-1. Install dependencies (see project root `pyproject.toml`).
-2. Run the notebook or the scripts in `implementation.py`.
+1. Install MerLin dependencies.
+2. Run the notebook or the `implementation.py` script.
 
 ## Status
 

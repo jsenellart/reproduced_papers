@@ -1,4 +1,4 @@
-# Runtime dependencies for reproductions (MNIST classical baselines, notebooks)
+# Requirements for the QRKD paper reproduction (MNIST classical baselines)
 numpy>=1.23
 torch>=2.2
 torchvision>=0.17

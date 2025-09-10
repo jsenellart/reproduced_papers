@@ -14,9 +14,12 @@ Each paper reproduction is designed to be accessible, well-documented, and easy 
 
 ## Installation
 
-Install the runtime dependencies using the provided requirements file:
+Each paper reproduction has its own `requirements.txt` inside its folder. Navigate into that folder and install dependencies there.
+
+Example (QRKD):
 
 ```bash
+cd QRKD
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip

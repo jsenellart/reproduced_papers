@@ -18,9 +18,29 @@ This reproduction follows the guidelines from the repository README and the MerL
 - `tests/`: Sanity checks and minimal validation tests.
 
 ## How to run
+Run everything from this `QRKD/` directory with a local virtual environment.
 
-1. Install MerLin dependencies.
-2. Run the notebook or the `implementation.py` script.
+Setup:
+
+```bash
+cd QRKD
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -r requirements.txt
+```
+
+Quick run (short training for a fast check):
+
+```bash
+QRKD_TEACHER_EPOCHS=1 QRKD_EPOCHS=1 python -c "from QRKD.implementation import run; run()"
+```
+
+Notebook:
+
+```bash
+jupyter notebook notebook.ipynb
+```
 
 ## Status
 

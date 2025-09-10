@@ -21,7 +21,7 @@ import torch
 from lib.datasets import DataConfig, mnist_loaders
 from lib.losses import QRKDWeights
 from lib.models import StudentCNN, TeacherCNN
-from lib.train import TrainConfig, train_student
+from lib.train import TrainConfig, train_student, train_teacher
 from lib.utils import set_seed
 
 
@@ -48,31 +48,12 @@ def get_loaders(
     raise ValueError(f"Unsupported dataset: {dataset}")
 
 
-def train_teacher(
-    train_loader, test_loader, epochs: int = 5, lr: float = 1e-3, verbose: bool = True
+def _train_teacher_wrapper(
+    train_loader, epochs: int = 5, lr: float = 1e-3, verbose: bool = True
 ) -> TeacherCNN:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = TeacherCNN().to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
-    ce = torch.nn.CrossEntropyLoss()
-    for epoch in range(epochs):
-        total_loss = 0.0
-        n_batches = 0
-        model.train()
-        for x, y in train_loader:
-            x, y = x.to(device), y.to(device)
-            logits, _ = model(x)
-            loss = ce(logits, y)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            total_loss += loss.item()
-            n_batches += 1
-        if verbose and n_batches > 0:
-            print(
-                f"[Teacher] Epoch {epoch + 1}/{epochs} - loss: {total_loss / n_batches:.4f}"
-            )
-    return model.eval()
+    model = TeacherCNN()
+    cfg = TrainConfig(epochs=epochs, lr=lr, verbose=verbose)
+    return train_teacher(model, train_loader, cfg)  # returns eval() model
 
 
 def save_model(model: torch.nn.Module, save_dir: str, filename: str) -> str:
@@ -105,9 +86,7 @@ def run() -> dict[str, float]:
     train_loader, test_loader = get_loaders("mnist", cfg.batch_size)
 
     # 1) Train teacher quickly (could be pre-trained in practice)
-    teacher = train_teacher(
-        train_loader, test_loader, epochs=env_teacher_epochs, lr=cfg.lr
-    )
+    teacher = _train_teacher_wrapper(train_loader, epochs=env_teacher_epochs, lr=cfg.lr)
 
     # 2) Student from scratch (task loss only)
     student_scratch = StudentCNN()
@@ -223,9 +202,8 @@ def main():
     # nothing
 
     if args.task == "teacher":
-        teacher = train_teacher(
+        teacher = _train_teacher_wrapper(
             train_loader,
-            test_loader,
             epochs=args.epochs,
             lr=args.lr,
             verbose=not args.quiet,

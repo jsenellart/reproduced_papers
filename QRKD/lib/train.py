@@ -21,6 +21,49 @@ class TrainConfig:
     verbose: bool = True
 
 
+def train_teacher(
+    model: nn.Module, train_loader: DataLoader, cfg: TrainConfig
+) -> nn.Module:
+    """Supervised training loop for a standalone model (teacher).
+
+    Uses TrainConfig for epochs/lr/device/verbose to normalize API with student training.
+    Returns the trained model in eval mode.
+    """
+    device = torch.device(cfg.device)
+    model.to(device)
+    opt = Adam(model.parameters(), lr=cfg.lr)
+    ce = nn.CrossEntropyLoss()
+
+    for epoch in range(cfg.epochs):
+        total_loss = 0.0
+        n_batches = 0
+        model.train()
+        iterator = train_loader
+        if cfg.verbose:
+            iterator = tqdm(
+                train_loader, desc=f"Epoch {epoch + 1}/{cfg.epochs}", leave=False
+            )
+        for x, y in iterator:
+            x, y = x.to(device), y.to(device)
+            logits, _ = model(x)
+            loss = ce(logits, y)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            total_loss += loss.item()
+            n_batches += 1
+            if cfg.verbose:
+                avg_loss = total_loss / max(n_batches, 1)
+                iterator.set_postfix(loss=f"{avg_loss:.4f}")
+        if cfg.verbose and n_batches > 0:
+            print(
+                f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {total_loss / n_batches:.4f}"
+            )
+
+    model.eval()
+    return model
+
+
 def train_student(
     student: nn.Module,
     teacher: nn.Module,

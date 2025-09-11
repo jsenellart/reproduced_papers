@@ -88,11 +88,11 @@ def run() -> dict[str, float]:
     # 1) Train teacher quickly (could be pre-trained in practice)
     teacher = _train_teacher_wrapper(train_loader, epochs=env_teacher_epochs, lr=cfg.lr)
 
-    # 2) Student from scratch (task loss only)
+    # 2) Student from scratch (task loss only) — no teacher used
     student_scratch = StudentCNN()
     res_scratch = train_student(
         student_scratch,
-        teacher,
+        None,
         train_loader,
         test_loader,
         TrainConfig(epochs=env_epochs, lr=cfg.lr),
@@ -222,13 +222,15 @@ def main():
         print(f"Saved teacher to {path}")
         return
 
-    # For students, a teacher is mandatory
-    if args.teacher_path:
-        teacher = load_teacher(args.teacher_path)
-    else:
-        raise SystemExit(
-            "--teacher-path is required for student tasks. Train a teacher first with --task teacher."
-        )
+    # For students, a teacher is needed only for KD/RKD/QRKD, not for scratch
+    teacher = None
+    if args.task != "student_scratch":
+        if args.teacher_path:
+            teacher = load_teacher(args.teacher_path)
+        else:
+            raise SystemExit(
+                "--teacher-path is required for KD/RKD/QRKD student tasks. Train a teacher first with --task teacher."
+            )
 
     # Instantiate student
     student = StudentCNN().to(device)

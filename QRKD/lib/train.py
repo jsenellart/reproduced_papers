@@ -74,7 +74,7 @@ def train_teacher(
 
 def train_student(
     student: nn.Module,
-    teacher: nn.Module,
+    teacher: nn.Module | None,
     train_loader: DataLoader,
     test_loader: DataLoader,
     cfg: TrainConfig,
@@ -82,12 +82,18 @@ def train_student(
 ) -> dict[str, float]:
     device = torch.device(cfg.device)
     student.to(device)
-    teacher.to(device)
-    teacher.eval()
+    # Determine whether any distillation terms are active and a teacher is provided
+    distill_active = bool((getattr(weights, "kd", 0.0) or getattr(weights, "dr", 0.0) or getattr(weights, "ar", 0.0)) and (teacher is not None))
+    if teacher is not None:
+        teacher.to(device)
+        teacher.eval()
     if cfg.verbose:
-        print(
-            f"[Student] Params: {count_parameters(student):,} | Teacher Params: {count_parameters(teacher):,}"
-        )
+        if teacher is not None:
+            print(
+                f"[Student] Params: {count_parameters(student):,} | Teacher Params: {count_parameters(teacher):,}"
+            )
+        else:
+            print(f"[Student] Params: {count_parameters(student):,} | Teacher: None (scratch)")
         if cfg.max_batches is not None:
             print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
@@ -120,11 +126,16 @@ def train_student(
             )
         for batch_idx, (x, y) in enumerate(iterator, 1):
             x, y = x.to(device), y.to(device)
-            with torch.no_grad():
-                logits_t, feat_t = teacher(x)
+            if distill_active:
+                with torch.no_grad():
+                    assert teacher is not None  # for type checkers
+                    logits_t, feat_t = teacher(x)
             logits_s, feat_s = student(x)
             loss_task = ce(logits_s, y)
-            loss_rkd = weights(logits_s, logits_t, feat_s, feat_t)
+            if distill_active:
+                loss_rkd = weights(logits_s, logits_t, feat_s, feat_t)
+            else:
+                loss_rkd = torch.zeros((), device=device)
             loss = loss_task + loss_rkd
             opt.zero_grad()
             loss.backward()

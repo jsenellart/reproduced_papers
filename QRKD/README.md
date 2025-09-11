@@ -66,6 +66,33 @@ Notebook:
 jupyter notebook notebook.ipynb
 ```
 
+## Evaluation (Table 1)
+
+Un script autonome calcule les métriques à la manière de la Table 1 (MNIST):
+- Train Acc, Test Acc
+- Acc. Gap = Train − Test
+- T&S Gap = Teacher(Test) − Student(Test)
+- Dist. Gain = Student(Test) − Scratch(Test)
+
+Exécution (depuis `QRKD/`):
+
+```bash
+# Exemple avec checkpoints entraînés 10 epochs
+.venv/bin/python scripts/evaluate_table1.py \
+	--teacher models/mnist_teacher_seed0_e10.pt \
+	--scratch models/mnist_student-scratch_seed0_e10.pt \
+	--kd      models/mnist_student-kd_seed0_e10.pt \
+	--rkd     models/mnist_student-rkd_seed0_e10.pt \
+	--qrkd    models/mnist_student-qrkd_seed0_e10.pt
+
+# Option: préciser l’emplacement des données
+.venv/bin/python scripts/evaluate_table1.py \
+	--teacher models/mnist_teacher_seed0_e10.pt \
+	--data-dir QRKD/data
+```
+
+Le script charge les modèles, évalue accuracies sur train/test et affiche un tableau compact.
+
 ## Status
 
 - [ ] WIP: initial scaffolding

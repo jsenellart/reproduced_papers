@@ -51,38 +51,11 @@ class TeacherCNN(BaseCNN12x4x4):
         )
 
 
-class StudentCNN(nn.Module):
-    """Student without FC hidden layer, exactly 1,725 params.
-
-    Architecture:
-    - conv1: 1 -> 3 channels, 3x3, bias=False
-    - conv2: 3 -> 1 channel, 3x3, bias=False
-    - maxpool 2x2 (28 -> 14)
-    - adaptive avg pool to 1x1
-    - conv3 (1x1): 1 -> 151 channels, bias=False
-    - head: Linear(151 -> 10), bias=True
-
-    Param count:
-    9*c1 + 9*c1*c2 + c2*K + 10*K + 10 = 9*3 + 9*3*1 + 1*151 + 10*151 + 10 = 27+27+151+1510+10 = 1,725
-    Features returned for RKD are the flattened 151-dim vector before the logits.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        c1, c2, k = 3, 1, 151
-        self.conv1 = nn.Conv2d(1, c1, 3, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(c1, c2, 3, padding=1, bias=False)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.gap = nn.AdaptiveAvgPool2d((1, 1))
-        self.conv3 = nn.Conv2d(c2, k, 1, bias=False)
-        self.head = nn.Linear(k, 10, bias=True)
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        x = f.relu(self.conv1(x))
-        x = f.relu(self.conv2(x))
-        x = self.pool(x)
-        x = self.gap(x)
-        x = self.conv3(x)
-        feat = torch.flatten(x, 1)  # (N, 151)
-        logits = self.head(feat)
-        return logits, feat
+class StudentCNN(BaseCNN12x4x4):
+    def __init__(self, c1: int = 19, c2: int = 4, f_hidden: int = 4) -> None:
+        """Reference student (1,725 params) with (c1,c2,f)=(19,4,4)."""
+        super().__init__(
+            c1=c1,
+            c2=c2,
+            f_hidden=f_hidden
+        )

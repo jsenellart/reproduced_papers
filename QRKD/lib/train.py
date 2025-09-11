@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -25,7 +26,7 @@ class TrainConfig:
 
 def train_teacher(
     model: nn.Module, train_loader: DataLoader, cfg: TrainConfig
-) -> nn.Module:
+) -> Tuple[nn.Module, Dict[str, List[float]]]:
     """Supervised training loop for a standalone model (teacher).
 
     Uses TrainConfig for epochs/lr/device/verbose to normalize API with student training.
@@ -40,6 +41,7 @@ def train_teacher(
         if cfg.max_batches is not None:
             print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
+    history: List[float] = []
     for epoch in range(cfg.epochs):
         total_loss = 0.0
         n_batches = 0
@@ -63,13 +65,16 @@ def train_teacher(
                 iterator.set_postfix(loss=f"{avg_loss:.4f}")
             if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
                 break
-        if cfg.verbose and n_batches > 0:
-            print(
-                f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {total_loss / n_batches:.4f}"
-            )
+        if n_batches > 0:
+            avg = total_loss / n_batches
+            history.append(avg)
+            if cfg.verbose:
+                print(
+                    f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {avg:.4f}"
+                )
 
     model.eval()
-    return model
+    return model, {"loss": history}
 
 
 def train_student(
@@ -79,7 +84,7 @@ def train_student(
     test_loader: DataLoader,
     cfg: TrainConfig,
     weights: QRKDWeights,
-) -> dict[str, float]:
+) -> dict[str, float | Dict[str, List[float]]]:
     device = torch.device(cfg.device)
     student.to(device)
     # Determine whether any distillation terms are active and a teacher is provided
@@ -113,6 +118,9 @@ def train_student(
                 total += y.size(0)
         return correct / total * 100.0
 
+    hist_loss: List[float] = []
+    hist_task: List[float] = []
+    hist_distill: List[float] = []
     for epoch in range(cfg.epochs):
         total_loss = 0.0
         total_task = 0.0
@@ -157,13 +165,17 @@ def train_student(
             if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
                 break
 
-        if cfg.verbose and n_batches > 0:
+        if n_batches > 0:
             avg_loss = total_loss / n_batches
             avg_task = total_task / n_batches
             avg_rkd = total_rkd / n_batches
-            print(
-                f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})"
-            )
+            hist_loss.append(avg_loss)
+            hist_task.append(avg_task)
+            hist_distill.append(avg_rkd)
+            if cfg.verbose:
+                print(
+                    f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})"
+                )
 
     acc = evaluate(student, test_loader)
-    return {"test_acc": acc}
+    return {"test_acc": acc, "history": {"loss": hist_loss, "task": hist_task, "distill": hist_distill}}

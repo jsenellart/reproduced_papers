@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import json
 from dataclasses import dataclass
 
 import torch
@@ -53,7 +54,8 @@ def _train_teacher_wrapper(
 ) -> TeacherCNN:
     model = TeacherCNN()
     cfg = TrainConfig(epochs=epochs, lr=lr, verbose=verbose)
-    return train_teacher(model, train_loader, cfg)  # returns eval() model
+    model, hist = train_teacher(model, train_loader, cfg)
+    return model  # for demo run(); CLI handles saving histories
 
 
 def save_model(model: torch.nn.Module, save_dir: str, filename: str) -> str:
@@ -193,6 +195,7 @@ def main():
         action="store_true",
         help="Limit to 50 batches per epoch for quick training checks",
     )
+    # Student architecture fixed to reference (19,4,4) — no CLI override
 
     args = parser.parse_args()
 
@@ -215,11 +218,15 @@ def main():
             max_batches=50 if args.checkrun else None,
         )
         model = TeacherCNN()
-        teacher = train_teacher(model, train_loader, tcfg)
+        teacher, history = train_teacher(model, train_loader, tcfg)
         chk = "_chk" if args.checkrun else ""
         fname = f"{args.dataset}_teacher_seed{args.seed}_e{args.epochs}{chk}.pt"
         path = save_model(teacher, args.save_dir, fname)
         print(f"Saved teacher to {path}")
+        # save loss history json next to checkpoint
+        loss_path = os.path.splitext(path)[0] + "-loss.json"
+        with open(loss_path, "w") as f:
+            json.dump(history, f)
         return
 
     # For students, a teacher is needed only for KD/RKD/QRKD, not for scratch
@@ -270,6 +277,12 @@ def main():
     path = save_model(student, args.save_dir, fname)
     print(f"Saved student to {path}")
     print(f"Test accuracy: {results['test_acc']:.2f}%")
+    # save loss history JSON
+    hist = results.get("history")
+    if isinstance(hist, dict):
+        loss_path = os.path.splitext(path)[0] + "-loss.json"
+        with open(loss_path, "w") as f:
+            json.dump(hist, f)
 
 
 if __name__ == "__main__":

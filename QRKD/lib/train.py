@@ -25,7 +25,7 @@ class TrainConfig:
 
 
 def train_teacher(
-    model: nn.Module, train_loader: DataLoader, cfg: TrainConfig
+    model: nn.Module, train_loader: DataLoader, cfg: TrainConfig, test_loader: DataLoader | None = None
 ) -> Tuple[nn.Module, Dict[str, List[float]]]:
     """Supervised training loop for a standalone model (teacher).
 
@@ -41,7 +41,23 @@ def train_teacher(
         if cfg.max_batches is not None:
             print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
-    history: List[float] = []
+    history_loss: List[float] = []
+    history_train_acc: List[float] = []
+    history_test_acc: List[float] = []
+
+    def _evaluate_acc(m: nn.Module, loader: DataLoader) -> float:
+        device = torch.device(cfg.device)
+        m.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for x, y in loader:
+                x, y = x.to(device), y.to(device)
+                logits, _ = m(x)
+                pred = logits.argmax(dim=1)
+                correct += (pred == y).sum().item()
+                total += y.size(0)
+        return correct / max(total, 1) * 100.0
     for epoch in range(cfg.epochs):
         total_loss = 0.0
         n_batches = 0
@@ -67,14 +83,25 @@ def train_teacher(
                 break
         if n_batches > 0:
             avg = total_loss / n_batches
-            history.append(avg)
+            history_loss.append(avg)
+            # Per-epoch accuracies
+            train_acc = _evaluate_acc(model, train_loader)
+            history_train_acc.append(train_acc)
+            if test_loader is not None:
+                test_acc = _evaluate_acc(model, test_loader)
+                history_test_acc.append(test_acc)
             if cfg.verbose:
+                extra = ""
+                if test_loader is not None:
+                    extra = f", train_acc: {train_acc:.2f}%, test_acc: {history_test_acc[-1]:.2f}%"
+                else:
+                    extra = f", train_acc: {train_acc:.2f}%"
                 print(
-                    f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {avg:.4f}"
+                    f"[Teacher] Epoch {epoch + 1}/{cfg.epochs} - loss: {avg:.4f}{extra}"
                 )
 
     model.eval()
-    return model, {"loss": history}
+    return model, {"loss": history_loss, "train_acc": history_train_acc, "test_acc": history_test_acc}
 
 
 def train_student(
@@ -84,6 +111,7 @@ def train_student(
     test_loader: DataLoader,
     cfg: TrainConfig,
     weights: QRKDWeights,
+    student_name: str | None = None,
 ) -> dict[str, float | Dict[str, List[float]]]:
     device = torch.device(cfg.device)
     student.to(device)
@@ -93,12 +121,11 @@ def train_student(
         teacher.to(device)
         teacher.eval()
     if cfg.verbose:
+        name = f"{student_name} " if student_name else ""
         if teacher is not None:
-            print(
-                f"[Student] Params: {count_parameters(student):,} | Teacher Params: {count_parameters(teacher):,}"
-            )
+            print(f"[Student] {name}Params: {count_parameters(student):,} | Teacher Params: {count_parameters(teacher):,}")
         else:
-            print(f"[Student] Params: {count_parameters(student):,} | Teacher: None (scratch)")
+            print(f"[Student] {name}Params: {count_parameters(student):,} | Teacher: None (scratch)")
         if cfg.max_batches is not None:
             print(f"[Checkrun] Limiting to {cfg.max_batches} batches per epoch")
 
@@ -121,6 +148,8 @@ def train_student(
     hist_loss: List[float] = []
     hist_task: List[float] = []
     hist_distill: List[float] = []
+    hist_train_acc: List[float] = []
+    hist_test_acc: List[float] = []
     for epoch in range(cfg.epochs):
         total_loss = 0.0
         total_task = 0.0
@@ -164,7 +193,7 @@ def train_student(
                 )
             if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
                 break
-
+        # end epoch: aggregate and evaluate
         if n_batches > 0:
             avg_loss = total_loss / n_batches
             avg_task = total_task / n_batches
@@ -172,10 +201,15 @@ def train_student(
             hist_loss.append(avg_loss)
             hist_task.append(avg_task)
             hist_distill.append(avg_rkd)
+            # per-epoch accuracies
+            train_acc = evaluate(student, train_loader)
+            test_acc = evaluate(student, test_loader)
+            hist_train_acc.append(train_acc)
+            hist_test_acc.append(test_acc)
             if cfg.verbose:
                 print(
-                    f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f})"
+                    f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f}), train_acc: {train_acc:.2f}%, test_acc: {test_acc:.2f}%"
                 )
 
     acc = evaluate(student, test_loader)
-    return {"test_acc": acc, "history": {"loss": hist_loss, "task": hist_task, "distill": hist_distill}}
+    return {"test_acc": acc, "history": {"loss": hist_loss, "task": hist_task, "distill": hist_distill, "train_acc": hist_train_acc, "test_acc": hist_test_acc}}

@@ -50,11 +50,11 @@ def get_loaders(
 
 
 def _train_teacher_wrapper(
-    train_loader, epochs: int = 5, lr: float = 1e-3, verbose: bool = True
+    train_loader, test_loader=None, epochs: int = 5, lr: float = 1e-3, verbose: bool = True
 ) -> TeacherCNN:
     model = TeacherCNN()
     cfg = TrainConfig(epochs=epochs, lr=lr, verbose=verbose)
-    model, hist = train_teacher(model, train_loader, cfg)
+    model, hist = train_teacher(model, train_loader, cfg, test_loader)
     return model  # for demo run(); CLI handles saving histories
 
 
@@ -88,7 +88,7 @@ def run() -> dict[str, float]:
     train_loader, test_loader = get_loaders("mnist", cfg.batch_size)
 
     # 1) Train teacher quickly (could be pre-trained in practice)
-    teacher = _train_teacher_wrapper(train_loader, epochs=env_teacher_epochs, lr=cfg.lr)
+    teacher = _train_teacher_wrapper(train_loader, test_loader, epochs=env_teacher_epochs, lr=cfg.lr)
 
     # 2) Student from scratch (task loss only) — no teacher used
     student_scratch = StudentCNN()
@@ -99,6 +99,7 @@ def run() -> dict[str, float]:
         test_loader,
         TrainConfig(epochs=env_epochs, lr=cfg.lr),
         QRKDWeights(kd=0.0, dr=0.0, ar=0.0),
+        student_name="scratch",
     )
 
     # 3) KD only
@@ -110,6 +111,7 @@ def run() -> dict[str, float]:
         test_loader,
         TrainConfig(epochs=env_epochs, lr=cfg.lr),
         QRKDWeights(kd=0.5, dr=0.0, ar=0.0),
+        student_name="kd",
     )
 
     # 4) RKD (distance + angle)
@@ -121,6 +123,7 @@ def run() -> dict[str, float]:
         test_loader,
         TrainConfig(epochs=env_epochs, lr=cfg.lr),
         QRKDWeights(kd=0.0, dr=0.1, ar=0.1),
+        student_name="rkd",
     )
 
     # 5) QRKD classical (KD + RKD). Quantum loss will be added later.
@@ -132,6 +135,7 @@ def run() -> dict[str, float]:
         test_loader,
         TrainConfig(epochs=env_epochs, lr=cfg.lr),
         QRKDWeights(kd=0.5, dr=0.1, ar=0.1),
+        student_name="qrkd",
     )
 
     summary = {
@@ -218,15 +222,19 @@ def main():
             max_batches=50 if args.checkrun else None,
         )
         model = TeacherCNN()
-        teacher, history = train_teacher(model, train_loader, tcfg)
         chk = "_chk" if args.checkrun else ""
         fname = f"{args.dataset}_teacher_seed{args.seed}_e{args.epochs}{chk}.pt"
-        path = save_model(teacher, args.save_dir, fname)
-        print(f"Saved teacher to {path}")
-        # save loss history json next to checkpoint
-        loss_path = os.path.splitext(path)[0] + "-loss.json"
-        with open(loss_path, "w") as f:
-            json.dump(history, f)
+        path = os.path.join(args.save_dir, fname)
+        if os.path.exists(path):
+            print(f"Checkpoint exists, skipping training: {path}")
+        else:
+            teacher, history = train_teacher(model, train_loader, tcfg, test_loader)
+            path = save_model(teacher, args.save_dir, fname)
+            print(f"Saved teacher to {path}")
+            # save loss history json next to checkpoint
+            loss_path = os.path.splitext(path)[0] + "-loss.json"
+            with open(loss_path, "w") as f:
+                json.dump(history, f)
         return
 
     # For students, a teacher is needed only for KD/RKD/QRKD, not for scratch
@@ -258,31 +266,35 @@ def main():
     else:
         raise ValueError(f"Unknown task {args.task}")
 
-    results = train_student(
-        student,
-        teacher,
-        train_loader,
-        test_loader,
-        TrainConfig(
-            epochs=args.epochs,
-            lr=args.lr,
-            verbose=not args.quiet,
-            max_batches=50 if args.checkrun else None,
-        ),
-        weights,
-    )
-
     chk = "_chk" if args.checkrun else ""
     fname = f"{args.dataset}_student-{variant}_seed{args.seed}_e{args.epochs}{chk}.pt"
-    path = save_model(student, args.save_dir, fname)
-    print(f"Saved student to {path}")
-    print(f"Test accuracy: {results['test_acc']:.2f}%")
-    # save loss history JSON
-    hist = results.get("history")
-    if isinstance(hist, dict):
-        loss_path = os.path.splitext(path)[0] + "-loss.json"
-        with open(loss_path, "w") as f:
-            json.dump(hist, f)
+    out_path = os.path.join(args.save_dir, fname)
+    if os.path.exists(out_path):
+        print(f"Checkpoint exists, skipping training: {out_path}")
+    else:
+        results = train_student(
+            student,
+            teacher,
+            train_loader,
+            test_loader,
+            TrainConfig(
+                epochs=args.epochs,
+                lr=args.lr,
+                verbose=not args.quiet,
+                max_batches=50 if args.checkrun else None,
+            ),
+            weights,
+            student_name=variant,
+        )
+        path = save_model(student, args.save_dir, fname)
+        print(f"Saved student to {path}")
+        print(f"Test accuracy: {results['test_acc']:.2f}%")
+        # save loss history JSON
+        hist = results.get("history")
+        if isinstance(hist, dict):
+            loss_path = os.path.splitext(path)[0] + "-loss.json"
+            with open(loss_path, "w") as f:
+                json.dump(hist, f)
 
 
 if __name__ == "__main__":

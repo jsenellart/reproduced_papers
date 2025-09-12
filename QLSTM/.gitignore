@@ -1,12 +1,6 @@
 # QLSTM artifacts
-__pycache__/
-*.pyc
-*.pt
-*.pth
-.env
-.venv
 results/*.csv
 results/*.json
 results/*.png
-.ipynb_checkpoints/
 tmp_*/
+experiments/

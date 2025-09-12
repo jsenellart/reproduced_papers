@@ -132,6 +132,37 @@ Loss_RKD = w_dr * Loss_dist + w_ar * Loss_angle
 
 Poids par défaut (classique): `kd=0.5, dr=0.1, ar=0.1` pour la combinaison (KD + RKD) — ajustables via `QRKDWeights`.
 
+### Debug & Diagnostic
+
+Deux mécanismes aident à diagnostiquer un entraînement « bloqué » (ex: seed scratch qui ne progresse pas):
+
+1. Instrumentation interne (`QRKD_DEBUG=1`):
+	 - Active la collecte par époque des listes suivantes (limité aux `QRKD_DEBUG_MAXBATCH` premiers batches, défaut 5):
+		 * `batch_grad_norms` (norme L2 globale des gradients)
+		 * `batch_logits_mean` / `batch_logits_std`
+		 * `batch_pred_entropy` (entropie moyenne des prédictions softmax)
+		 * `batch_label_entropy` (entropie de distribution des labels dans le mini-batch)
+	 - Les données apparaissent dans le JSON d'historique sous la clé `debug` après l'entraînement du student.
+	 - Usage:
+		 ```bash
+		 QRKD_DEBUG=1 QRKD_DEBUG_MAXBATCH=8 \
+			 .venv/bin/python implementation.py --task student_scratch --epochs 2 --seed 5
+		 ```
+
+2. Test d'overfit d'un batch unique (`scripts/debug_overfit_batch.py`):
+	 - Réutilise la même batch pour plusieurs itérations afin de vérifier que le modèle peut sur-apprendre rapidement (loss -> 0, acc -> 100%).
+	 - Si la loss stagne et l'accuracy reste ~10%, suspecter: initialisation pathologique, problème de gradient, device mismatch.
+	 - Exemple:
+		 ```bash
+		 PYTHONPATH=. .venv/bin/python scripts/debug_overfit_batch.py --steps 200 --seed 5 --json-out results/overfit_seed5.json
+		 ```
+	 - Le JSON généré (`loss`, `acc`, `grad_norm`) peut être tracé pour inspection.
+
+Interprétation rapide des signaux:
+- `batch_grad_norms` quasi nuls dès le début ⇒ gradients annulés (vérifier loss, requires_grad, optimiser).
+- `batch_pred_entropy` très haute et stable + `batch_logits_std` très faible ⇒ réseau ne sort pas de distribution uniforme (poids figés / learning rate trop bas).
+- Overfit batch n'atteint pas >95% acc en <100 steps ⇒ vérifier lr, initialisation, normalisation d'entrée.
+
 ## Status
 
 - [x] Scaffolding & baselines (Teacher, Scratch, KD, RKD)

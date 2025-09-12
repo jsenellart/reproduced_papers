@@ -21,7 +21,7 @@ import glob
 import json
 import os
 from collections import defaultdict
-from statistics import mean
+from statistics import mean, pstdev
 from typing import Dict, List
 
 import matplotlib.pyplot as plt
@@ -52,29 +52,30 @@ def load_histories(save_dir: str, dataset: str, epochs: int, include_qrkd: bool)
     return out
 
 
-def aggregate_curve(hists: List[dict], key: str) -> List[float]:
+def aggregate_curve(hists: List[dict], key: str) -> tuple[List[float], List[float]]:
+    """Return (mean_per_epoch, std_per_epoch)."""
     if not hists:
-        return []
-    # Determine maximum possible epochs available across histories for this key
+        return [], []
     max_len = 0
     for h in hists:
         seq = h.get(key, [])
         if isinstance(seq, list):
             max_len = max(max_len, len(seq))
     if max_len == 0:
-        return []
-    vals: List[float] = []
+        return [], []
+    means: List[float] = []
+    stds: List[float] = []
     for e in range(max_len):
-        bucket = []
-        for h in hists:
-            seq = h.get(key, [])
-            if isinstance(seq, list) and len(seq) > e:
-                bucket.append(seq[e])
-        if bucket:
-            vals.append(mean(bucket))
-        else:
+        bucket = [h.get(key, [])[e] for h in hists if isinstance(h.get(key, []), list) and len(h.get(key, [])) > e]
+        if not bucket:
             break
-    return vals
+        if len(bucket) == 1:
+            means.append(bucket[0])
+            stds.append(0.0)
+        else:
+            means.append(mean(bucket))
+            stds.append(pstdev(bucket))
+    return means, stds
 
 
 def plot_curves(agg: Dict[str, Dict[str, List[float]]], out_dir: str):
@@ -83,8 +84,16 @@ def plot_curves(agg: Dict[str, Dict[str, List[float]]], out_dir: str):
     # Loss
     plt.figure(figsize=(6,4))
     for name, series in agg.items():
-        if series.get("loss"):
-            plt.plot(series["loss"], label=name)
+        loss_mean = series.get("loss_mean")
+        loss_std = series.get("loss_std")
+        if loss_mean:
+            plt.plot(loss_mean, label=name)
+            if loss_std:
+                import numpy as np
+                x = range(len(loss_mean))
+                lm = loss_mean
+                ls = loss_std
+                plt.fill_between(x, [m - s for m,s in zip(lm,ls)], [m + s for m,s in zip(lm,ls)], alpha=0.15)
     plt.xlabel("Epoch")
     plt.ylabel("Train loss")
     plt.title("Training loss vs. epoch")
@@ -97,8 +106,13 @@ def plot_curves(agg: Dict[str, Dict[str, List[float]]], out_dir: str):
     # Test accuracy
     plt.figure(figsize=(6,4))
     for name, series in agg.items():
-        if series.get("test_acc"):
-            plt.plot(series["test_acc"], label=name)
+        acc_mean = series.get("test_acc_mean")
+        acc_std = series.get("test_acc_std")
+        if acc_mean:
+            plt.plot(acc_mean, label=name)
+            if acc_std:
+                x = range(len(acc_mean))
+                plt.fill_between(x, [m - s for m,s in zip(acc_mean,acc_std)], [m + s for m,s in zip(acc_mean,acc_std)], alpha=0.15)
     plt.xlabel("Epoch")
     plt.ylabel("Test accuracy (%)")
     plt.title("Test accuracy vs. epoch")
@@ -124,9 +138,13 @@ def main():
     # Build aggregated series per variant
     agg: Dict[str, Dict[str, List[float]]] = {}
     for name, lst in hists.items():
+        loss_mean, loss_std = aggregate_curve(lst, "loss")
+        acc_mean, acc_std = aggregate_curve(lst, "test_acc")
         agg[name] = {
-            "loss": aggregate_curve(lst, "loss"),
-            "test_acc": aggregate_curve(lst, "test_acc"),
+            "loss_mean": loss_mean,
+            "loss_std": loss_std,
+            "test_acc_mean": acc_mean,
+            "test_acc_std": acc_std,
         }
 
     plot_curves(agg, args.out_dir)

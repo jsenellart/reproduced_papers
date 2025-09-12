@@ -75,6 +75,21 @@ def sweep(
     chk = "_chk" if checkrun else ""
     teacher_paths: Dict[int, str] = {}
     teacher_tests: Dict[int, float] = {}
+    def load_final_acc(json_path: str) -> tuple[float | None, float | None]:
+        """Load last epoch (train_acc, test_acc) from history JSON if present."""
+        if not os.path.exists(json_path):
+            return None, None
+        try:
+            with open(json_path, "r") as f:
+                hist = json.load(f)
+            train_hist = hist.get("train_acc") or []
+            test_hist = hist.get("test_acc") or []
+            tr = train_hist[-1] if train_hist else None
+            te = test_hist[-1] if test_hist else None
+            return tr, te
+        except Exception:
+            return None, None
+
     for seed in seeds:
         set_seed(seed)
         train_loader, test_loader = mnist_loaders(dcfg)
@@ -91,14 +106,22 @@ def sweep(
             teacher = TeacherCNN()
             teacher.load_state_dict(torch.load(t_path, map_location=torch.device(cfg.device)))
             teacher.eval()
+            # Load metrics from JSON if available
+            json_path = os.path.splitext(t_path)[0] + "-loss.json"
+            t_train, t_test = load_final_acc(json_path)
+            if t_train is None or t_test is None:
+                # Fallback evaluation only if missing
+                t_train = evaluate_accuracy(teacher, train_loader, torch.device(cfg.device))
+                t_test = evaluate_accuracy(teacher, test_loader, torch.device(cfg.device))
         else:
             teacher = TeacherCNN()
             teacher, hist_t = train_teacher(teacher, train_loader, cfg, test_loader)
             t_path = save_model(teacher, save_dir, t_fname)
             with open(os.path.splitext(t_path)[0] + "-loss.json", "w") as f:
                 json.dump(hist_t, f)
-        t_train = evaluate_accuracy(teacher, train_loader, torch.device(cfg.device))
-        t_test = evaluate_accuracy(teacher, test_loader, torch.device(cfg.device))
+            # Use freshly produced history for metrics
+            t_train = hist_t.get("train_acc", [None])[-1]
+            t_test = hist_t.get("test_acc", [None])[-1]
         all_metrics["Teacher"].append((t_train, t_test, t_train - t_test))
         teacher_paths[seed] = t_path
         teacher_tests[seed] = t_test
@@ -127,6 +150,11 @@ def sweep(
             scratch = StudentCNN()
             scratch.load_state_dict(torch.load(sc_path, map_location=torch.device(cfg.device)))
             scratch.eval()
+            sc_json = os.path.splitext(sc_path)[0] + "-loss.json"
+            sc_train, sc_test = load_final_acc(sc_json)
+            if sc_train is None or sc_test is None:
+                sc_train = evaluate_accuracy(scratch, train_loader, torch.device(cfg.device))
+                sc_test = evaluate_accuracy(scratch, test_loader, torch.device(cfg.device))
         else:
             scratch = StudentCNN()
             res_sc = train_student(scratch, None, train_loader, test_loader, cfg, QRKDWeights(kd=0.0, dr=0.0, ar=0.0), student_name="scratch")
@@ -135,8 +163,8 @@ def sweep(
             if isinstance(hist_s, dict):
                 with open(os.path.splitext(sc_path)[0] + "-loss.json", "w") as f:
                     json.dump(hist_s, f)
-        sc_train = evaluate_accuracy(scratch, train_loader, torch.device(cfg.device))
-        sc_test = evaluate_accuracy(scratch, test_loader, torch.device(cfg.device))
+                sc_train = hist_s.get("train_acc", [None])[-1]
+                sc_test = hist_s.get("test_acc", [None])[-1]
         all_metrics["Scratch"].append((sc_train, sc_test, sc_train - sc_test))
 
         # Load best teacher once per seed
@@ -152,6 +180,11 @@ def sweep(
             kd = StudentCNN()
             kd.load_state_dict(torch.load(kd_path, map_location=torch.device(cfg.device)))
             kd.eval()
+            kd_json = os.path.splitext(kd_path)[0] + "-loss.json"
+            kd_train, kd_test = load_final_acc(kd_json)
+            if kd_train is None or kd_test is None:
+                kd_train = evaluate_accuracy(kd, train_loader, torch.device(cfg.device))
+                kd_test = evaluate_accuracy(kd, test_loader, torch.device(cfg.device))
         else:
             kd = StudentCNN()
             res_kd = train_student(kd, best_teacher, train_loader, test_loader, cfg, QRKDWeights(kd=0.5, dr=0.0, ar=0.0), student_name="kd")
@@ -160,8 +193,8 @@ def sweep(
             if isinstance(hist_kd, dict):
                 with open(os.path.splitext(kd_path)[0] + "-loss.json", "w") as f:
                     json.dump(hist_kd, f)
-        kd_train = evaluate_accuracy(kd, train_loader, torch.device(cfg.device))
-        kd_test = evaluate_accuracy(kd, test_loader, torch.device(cfg.device))
+                kd_train = hist_kd.get("train_acc", [None])[-1]
+                kd_test = hist_kd.get("test_acc", [None])[-1]
         all_metrics["KD"].append((kd_train, kd_test, kd_train - kd_test))
 
         # RKD
@@ -172,6 +205,11 @@ def sweep(
             rkd = StudentCNN()
             rkd.load_state_dict(torch.load(rkd_path, map_location=torch.device(cfg.device)))
             rkd.eval()
+            rkd_json = os.path.splitext(rkd_path)[0] + "-loss.json"
+            rkd_train, rkd_test = load_final_acc(rkd_json)
+            if rkd_train is None or rkd_test is None:
+                rkd_train = evaluate_accuracy(rkd, train_loader, torch.device(cfg.device))
+                rkd_test = evaluate_accuracy(rkd, test_loader, torch.device(cfg.device))
         else:
             rkd = StudentCNN()
             res_rkd = train_student(rkd, best_teacher, train_loader, test_loader, cfg, QRKDWeights(kd=0.0, dr=0.1, ar=0.1), student_name="rkd")
@@ -180,8 +218,8 @@ def sweep(
             if isinstance(hist_rkd, dict):
                 with open(os.path.splitext(rkd_path)[0] + "-loss.json", "w") as f:
                     json.dump(hist_rkd, f)
-        rkd_train = evaluate_accuracy(rkd, train_loader, torch.device(cfg.device))
-        rkd_test = evaluate_accuracy(rkd, test_loader, torch.device(cfg.device))
+                rkd_train = hist_rkd.get("train_acc", [None])[-1]
+                rkd_test = hist_rkd.get("test_acc", [None])[-1]
         all_metrics["RKD"].append((rkd_train, rkd_test, rkd_train - rkd_test))
 
     # Aggregate and print (mean ± std)

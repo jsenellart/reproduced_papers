@@ -21,40 +21,35 @@ def kd_loss(
 
 
 def pairwise_distances(x: torch.Tensor) -> torch.Tensor:
-    """Compute pairwise L2 distances in a batch (N, D) -> (N, N)."""
-    x2 = (x * x).sum(dim=1, keepdim=True)
+    """Pairwise Euclidean distances (full NxN matrix, zeros on diagonal)."""
+    x2 = (x * x).sum(dim=1, keepdim=True)  # (N,1)
     dist2 = x2 + x2.t() - 2.0 * (x @ x.t())
-    dist2 = dist2.clamp_min(1e-9)
-    return torch.sqrt(dist2)
+    dist2 = dist2.clamp_min(0.0)
+    return dist2.clamp_min(1e-12).sqrt()
 
 
-def rkd_distance_loss(
-    student_feat: torch.Tensor, teacher_feat: torch.Tensor
-) -> torch.Tensor:
+def rkd_distance_loss(student_feat: torch.Tensor, teacher_feat: torch.Tensor) -> torch.Tensor:
+    """Relational KD distance term (matches official RKD: mean over positive distances)."""
+    with torch.no_grad():
+        td = pairwise_distances(teacher_feat)
+        mean_td = td[td > 0].mean()
+        td = td / (mean_td + 1e-12)
     sd = pairwise_distances(student_feat)
-    td = pairwise_distances(teacher_feat)
-    # Normalize by mean to stabilize
-    sd = sd / (sd.mean() + 1e-8)
-    td = td / (td.mean() + 1e-8)
+    mean_sd = sd[sd > 0].mean()
+    sd = sd / (mean_sd + 1e-12)
     return f.smooth_l1_loss(sd, td)
 
 
-def rkd_angle_loss(
-    student_feat: torch.Tensor, teacher_feat: torch.Tensor
-) -> torch.Tensor:
-    def angles(x: torch.Tensor) -> torch.Tensor:
-        # Centered differences: (x_i - x_j) normalized
-        diffs = x.unsqueeze(0) - x.unsqueeze(1)  # (N, N, D)
-        norms = diffs.norm(dim=-1, keepdim=True).clamp_min(1e-9)
-        dirs = diffs / norms
-        # Angles via cosine between direction pairs relative to reference index 0
-        ref = dirs[:, 0:1, :]  # (N,1,D)
-        cos = (dirs * ref).sum(dim=-1)  # (N,N)
-        return cos
-
-    sa = angles(student_feat)
-    ta = angles(teacher_feat)
-    return f.smooth_l1_loss(sa, ta)
+def rkd_angle_loss(student_feat: torch.Tensor, teacher_feat: torch.Tensor) -> torch.Tensor:
+    """Relational KD angle term (full pairwise angular relations, as in RKD repo)."""
+    with torch.no_grad():
+        td = teacher_feat.unsqueeze(0) - teacher_feat.unsqueeze(1)  # (N,N,D)
+        norm_td = f.normalize(td, p=2, dim=2)  # (N,N,D)
+        t_angle = torch.bmm(norm_td, norm_td.transpose(1, 2)).view(-1)  # (N*N*N)
+    sd = student_feat.unsqueeze(0) - student_feat.unsqueeze(1)
+    norm_sd = f.normalize(sd, p=2, dim=2)
+    s_angle = torch.bmm(norm_sd, norm_sd.transpose(1, 2)).view(-1)
+    return f.smooth_l1_loss(s_angle, t_angle)
 
 
 class QRKDWeights(nn.Module):

@@ -16,6 +16,9 @@ This reproduction follows the guidelines from the repository README and the MerL
 - `data/`: Datasets and preprocessing scripts.
 - `results/`: Generated figures and metrics.
 - `tests/`: Sanity checks and minimal validation tests.
+- `scripts/run_table1_sweep.py`: Multi-seed automation (train all teachers, pick best teacher, then train Scratch/KD/RKD; reports mean±std Table 1 metrics).
+- `scripts/plot_curves.py`: Aggregate per-epoch loss & test accuracy across seeds (Teacher, Scratch, KD, RKD, optional QRKD) + shaded std bands.
+- `scripts/evaluate_table1.py`: Single-seed Table 1 style evaluation (train/test, gaps, gains).
 
 ## How to run
 Run everything from this `QRKD/` directory with a local virtual environment.
@@ -92,9 +95,48 @@ Exécution (depuis `QRKD/`):
 
 Le script charge les modèles, évalue accuracies sur train/test et affiche un tableau compact.
 
+### Multi-seed sweep & plots
+
+Pour reproduire Table 1 (moyenne ± écart-type) et préparer les courbes (style Figure 5):
+
+```bash
+# Multi-seed (ex: 5 seeds, 10 epochs) – lance depuis QRKD/
+.venv/bin/python scripts/run_table1_sweep.py --epochs 10 --seeds 0 1 2 3 4
+
+# Générer les courbes (loss & test acc avec bandes ±std)
+.venv/bin/python scripts/plot_curves.py --dataset mnist --epochs 10 --save-dir models --out-dir results
+```
+
+Les figures produites:
+- `results/loss_vs_epoch.png`
+- `results/testacc_vs_epoch.png`
+
+### RKD (Distance & Angle) – définition utilisée
+
+La ré-implémentation suit fidèlement le référentiel officiel RKD:
+- Distance: normalisation par la moyenne des distances > 0 (excluant diagonale) pour chaque lot, SmoothL1 entre matrices normalisées.
+- Angle: tenseur des différences pairwise (N×N×D), normalisation L2, produit matriciel (`bmm`) pour obtenir toutes les relations angulaires, aplatis puis SmoothL1.
+
+Formules (simplifiées):
+```
+d_ij = ||f_i - f_j||_2
+\bar d = mean_{i≠j}(d_ij)  ;  D = d / \bar d
+Loss_dist = SmoothL1( D_student , D_teacher )
+
+Δ_ij = f_i - f_j;   u_ij = Δ_ij / ||Δ_ij||_2
+Angle_ijkl (implémenté via (u * u^T)) → vecteur aplati
+Loss_angle = SmoothL1( A_student , A_teacher )
+
+Loss_RKD = w_dr * Loss_dist + w_ar * Loss_angle
+```
+
+Poids par défaut (classique): `kd=0.5, dr=0.1, ar=0.1` pour la combinaison (KD + RKD) — ajustables via `QRKDWeights`.
+
 ## Status
 
-- [ ] WIP: initial scaffolding
-- [ ] Baseline results
-- [ ] Parity with paper figures
-- [ ] Extensions and ablations
+- [x] Scaffolding & baselines (Teacher, Scratch, KD, RKD)
+- [x] Multi-seed Table 1 reproduction (mean±std + gaps/gains)
+- [x] Courbes loss & accuracy avec bandes d'écart-type
+- [x] Mise à jour implémentation RKD conforme repo officiel
+- [ ] Intégration composante quantique (prochaine étape)
+- [ ] Ablations et hyperparam tuning avancé

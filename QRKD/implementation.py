@@ -291,7 +291,7 @@ def main():
         print(f"Test accuracy: {results['test_acc']:.2f}%")
         # save loss history JSON
         hist = results.get("history")
-        if isinstance(hist, dict):
+    if isinstance(hist, dict):
             loss_path = os.path.splitext(path)[0] + "-loss.json"
             with open(loss_path, "w") as f:
                 json.dump(hist, f)

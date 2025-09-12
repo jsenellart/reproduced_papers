@@ -1,18 +1,8 @@
-"""Training and evaluation loops to reproduce MNIST classical baselines (KD, RKD, QRKD classical parts).
-
-Debug instrumentation:
-    If environment variable ``QRKD_DEBUG`` is set to a non-empty value, the student
-    training loop will collect per-batch gradient norms and logits statistics for
-    the first ``QRKD_DEBUG_MAXBATCH`` batches (default: 5) of each epoch. The
-    collected information is added under the ``debug`` key of the returned dict
-    (``train_student`` only) so that pathological non-learning runs can be
-    diagnosed post-hoc without flooding stdout.
-"""
+"""Training and evaluation loops to reproduce MNIST classical baselines (KD, RKD, QRKD classical parts)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from typing import Dict, List, Tuple
 
 import torch
@@ -160,115 +150,61 @@ def train_student(
     hist_distill: List[float] = []
     hist_train_acc: List[float] = []
     hist_test_acc: List[float] = []
-    # Debug instrumentation containers (activated via env var)
-    debug_active = bool(os.environ.get("QRKD_DEBUG"))
-    debug_max_batches = int(os.environ.get("QRKD_DEBUG_MAXBATCH", "5"))
-    debug: Dict[str, List] = {}
-    if debug_active:
-        debug["batch_grad_norms"] = []  # list of lists per epoch
-        debug["batch_logits_mean"] = []
-        debug["batch_logits_std"] = []
-        debug["batch_pred_entropy"] = []
-        debug["batch_label_entropy"] = []
     for epoch in range(cfg.epochs):
-        total_loss = 0.0
-        total_task = 0.0
-        total_rkd = 0.0
+        total_loss = total_task = total_rkd = 0.0
         n_batches = 0
         student.train()
-        iterator = train_loader
-        if cfg.verbose:
-            iterator = tqdm(
-                train_loader, desc=f"Epoch {epoch + 1}/{cfg.epochs}", leave=False
-            )
-        epoch_grad_norms: List[float] = [] if debug_active else []
-        epoch_logits_mean: List[float] = [] if debug_active else []
-        epoch_logits_std: List[float] = [] if debug_active else []
-        epoch_pred_entropy: List[float] = [] if debug_active else []
-        epoch_label_entropy: List[float] = [] if debug_active else []
-
+        iterator = tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg.epochs}", leave=False) if cfg.verbose else train_loader
         for batch_idx, (x, y) in enumerate(iterator, 1):
             x, y = x.to(device), y.to(device)
             if distill_active:
                 with torch.no_grad():
-                    assert teacher is not None  # for type checkers
+                    assert teacher is not None
                     logits_t, feat_t = teacher(x)
             logits_s, feat_s = student(x)
             loss_task = ce(logits_s, y)
-            if distill_active:
-                loss_rkd = weights(logits_s, logits_t, feat_s, feat_t)
-            else:
-                loss_rkd = torch.zeros((), device=device)
+            loss_rkd = weights(logits_s, logits_t, feat_s, feat_t) if distill_active else torch.zeros((), device=device)
             loss = loss_task + loss_rkd
             opt.zero_grad()
             loss.backward()
-            if debug_active and batch_idx <= debug_max_batches:
-                # Gradient global L2 norm
-                total_norm = 0.0
-                for p in student.parameters():
-                    if p.grad is not None:
-                        param_norm = p.grad.detach().data.norm(2)
-                        total_norm += param_norm.item() ** 2
-                total_norm = total_norm ** 0.5
-                epoch_grad_norms.append(total_norm)
-                # Logits stats (pre-softmax)
-                logits_mean = logits_s.detach().mean().item()
-                logits_std = logits_s.detach().std(unbiased=False).item()
-                epoch_logits_mean.append(logits_mean)
-                epoch_logits_std.append(logits_std)
-                # Prediction entropy (after softmax)
-                probs = torch.softmax(logits_s.detach(), dim=1)
-                ent = (-probs * (probs.clamp_min(1e-8).log())).sum(dim=1).mean().item()
-                epoch_pred_entropy.append(ent)
-                # Label entropy for the mini-batch (should reflect class diversity)
-                with torch.no_grad():
-                    counts = torch.bincount(y, minlength=probs.shape[1]).float()
-                    p_lab = counts / counts.sum().clamp_min(1.0)
-                    lab_ent = (-p_lab * (p_lab.clamp_min(1e-8).log())).sum().item()
-                epoch_label_entropy.append(lab_ent)
             opt.step()
-            # accumulate metrics
             total_loss += loss.item()
             total_task += loss_task.item()
             total_rkd += loss_rkd.item()
             n_batches += 1
             if cfg.verbose:
-                avg_loss = total_loss / max(n_batches, 1)
-                avg_task = total_task / max(n_batches, 1)
-                avg_rkd = total_rkd / max(n_batches, 1)
                 iterator.set_postfix(
-                    loss=f"{avg_loss:.4f}",
-                    task=f"{avg_task:.4f}",
-                    distill=f"{avg_rkd:.4f}",
+                    loss=f"{total_loss/n_batches:.4f}",
+                    task=f"{total_task/n_batches:.4f}",
+                    distill=f"{total_rkd/n_batches:.4f}"
                 )
             if cfg.max_batches is not None and batch_idx >= cfg.max_batches:
                 break
-        # end epoch: aggregate and evaluate
-        if n_batches > 0:
-            avg_loss = total_loss / n_batches
-            avg_task = total_task / n_batches
-            avg_rkd = total_rkd / n_batches
-            hist_loss.append(avg_loss)
-            hist_task.append(avg_task)
-            hist_distill.append(avg_rkd)
-            # per-epoch accuracies
-            train_acc = evaluate(student, train_loader)
-            test_acc = evaluate(student, test_loader)
-            hist_train_acc.append(train_acc)
-            hist_test_acc.append(test_acc)
-            if debug_active:
-                debug["batch_grad_norms"].append(epoch_grad_norms)
-                debug["batch_logits_mean"].append(epoch_logits_mean)
-                debug["batch_logits_std"].append(epoch_logits_std)
-                debug["batch_pred_entropy"].append(epoch_pred_entropy)
-                debug["batch_label_entropy"].append(epoch_label_entropy)
-            if cfg.verbose:
-                print(
-                    f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f}), train_acc: {train_acc:.2f}%, test_acc: {test_acc:.2f}%"
-                )
+        if n_batches == 0:
+            continue
+        avg_loss = total_loss / n_batches
+        avg_task = total_task / n_batches
+        avg_rkd = total_rkd / n_batches
+        hist_loss.append(avg_loss)
+        hist_task.append(avg_task)
+        hist_distill.append(avg_rkd)
+        train_acc = evaluate(student, train_loader)
+        test_acc = evaluate(student, test_loader)
+        hist_train_acc.append(train_acc)
+        hist_test_acc.append(test_acc)
+        if cfg.verbose:
+            print(
+                f"Epoch {epoch + 1}/{cfg.epochs} - loss: {avg_loss:.4f} (task: {avg_task:.4f}, distill: {avg_rkd:.4f}), train_acc: {train_acc:.2f}%, test_acc: {test_acc:.2f}%"
+            )
 
     acc = evaluate(student, test_loader)
-    result = {"test_acc": acc, "history": {"loss": hist_loss, "task": hist_task, "distill": hist_distill, "train_acc": hist_train_acc, "test_acc": hist_test_acc}}
-    if debug_active:
-        result["debug"] = debug
-    return result
+    return {
+        "test_acc": acc,
+        "history": {
+            "loss": hist_loss,
+            "task": hist_task,
+            "distill": hist_distill,
+            "train_acc": hist_train_acc,
+            "test_acc": hist_test_acc,
+        },
+    }

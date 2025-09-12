@@ -6,7 +6,6 @@ Portions adapted from the original implementation in:
     Repository: https://github.com/ycchen1989/Quantum_Long_Short_Term_Memory
 
 Adaptation notes:
-    * Code reorganised into modular cells (ClassicalLSTMCell / QuantumLSTMCell) and VQC wrapper.
     * Variable names and minor structural changes for clarity; logic and algorithmic intent preserved.
 
 Original license (MIT):

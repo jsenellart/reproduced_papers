@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import csv
 from statistics import mean, pstdev
 from typing import Dict, List, Tuple
 
@@ -249,16 +250,73 @@ def sweep(
     def fmt(m, s):
         return f"{m:.2f} ± {s:.2f}"
 
+    summary_rows = []  # for summary CSV
     for name in ["Teacher", "Scratch", "KD", "RKD"]:
         m_tr, s_tr, m_te, s_te, m_gp, s_gp = agg(all_metrics[name])
-        if name == "Teacher":
+        if name in ("KD", "RKD"):
+            if name == "KD":
+                ts_gap_mean, ts_gap_std = mean(ts_gap_kd), pstdev(ts_gap_kd)
+                dist_gain_mean, dist_gain_std = mean(dist_gain_kd), pstdev(dist_gain_kd)
+            else:
+                ts_gap_mean, ts_gap_std = mean(ts_gap_rkd), pstdev(ts_gap_rkd)
+                dist_gain_mean, dist_gain_std = mean(dist_gain_rkd), pstdev(dist_gain_rkd)
+            print(f"{name:8s}, {fmt(m_tr,s_tr)}, {fmt(m_te,s_te)}, {fmt(m_gp,s_gp)}, {fmt(ts_gap_mean, ts_gap_std)}, {fmt(dist_gain_mean, dist_gain_std)}")
+        else:
             print(f"{name:8s}, {fmt(m_tr,s_tr)}, {fmt(m_te,s_te)}, {fmt(m_gp,s_gp)}, N/A, N/A")
-        elif name == "Scratch":
-            print(f"{name:8s}, {fmt(m_tr,s_tr)}, {fmt(m_te,s_te)}, {fmt(m_gp,s_gp)}, N/A, N/A")
-        elif name == "KD":
-            print(f"{name:8s}, {fmt(m_tr,s_tr)}, {fmt(m_te,s_te)}, {fmt(m_gp,s_gp)}, {fmt(mean(ts_gap_kd), pstdev(ts_gap_kd))}, {fmt(mean(dist_gain_kd), pstdev(dist_gain_kd))}")
-        elif name == "RKD":
-            print(f"{name:8s}, {fmt(m_tr,s_tr)}, {fmt(m_te,s_te)}, {fmt(m_gp,s_gp)}, {fmt(mean(ts_gap_rkd), pstdev(ts_gap_rkd))}, {fmt(mean(dist_gain_rkd), pstdev(dist_gain_rkd))}")
+            ts_gap_mean = ts_gap_std = dist_gain_mean = dist_gain_std = None
+        summary_rows.append({
+            "model": name,
+            "train_mean": f"{m_tr:.4f}",
+            "train_std": f"{s_tr:.4f}",
+            "test_mean": f"{m_te:.4f}",
+            "test_std": f"{s_te:.4f}",
+            "acc_gap_mean": f"{m_gp:.4f}",
+            "acc_gap_std": f"{s_gp:.4f}",
+            "t_s_gap_mean": (f"{ts_gap_mean:.4f}" if ts_gap_mean is not None else ""),
+            "t_s_gap_std": (f"{ts_gap_std:.4f}" if ts_gap_std is not None else ""),
+            "dist_gain_mean": (f"{dist_gain_mean:.4f}" if dist_gain_mean is not None else ""),
+            "dist_gain_std": (f"{dist_gain_std:.4f}" if dist_gain_std is not None else ""),
+        })
+
+    # ---------------- CSV EXPORT ----------------
+    results_dir = os.path.join("results")
+    os.makedirs(results_dir, exist_ok=True)
+    tag_chk = "_chk" if checkrun else ""
+    seed_tag = "-".join(str(s) for s in seeds)
+    base_name = f"table1_{dataset}_e{epochs}_seeds_{seed_tag}{tag_chk}"
+
+    # Per-seed raw metrics
+    per_seed_path = os.path.join(results_dir, base_name + "_per_seed.csv")
+    with open(per_seed_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "seed", "model", "train_acc", "test_acc", "acc_gap", "teacher_student_gap", "distillation_gain"
+        ])
+        # reconstruct per-seed rows
+        for idx, seed in enumerate(seeds):
+            # Teacher & Scratch first
+            t_tr, t_te, t_gap = all_metrics["Teacher"][idx]
+            sc_tr, sc_te, sc_gap = all_metrics["Scratch"][idx]
+            kd_tr, kd_te, kd_gap = all_metrics["KD"][idx]
+            rkd_tr, rkd_te, rkd_gap = all_metrics["RKD"][idx]
+            writer.writerow([seed, "Teacher", t_tr, t_te, t_gap, "", ""])  # teacher row
+            writer.writerow([seed, "Scratch", sc_tr, sc_te, sc_gap, "", ""])  # scratch row
+            writer.writerow([seed, "KD", kd_tr, kd_te, kd_gap, t_te - kd_te, kd_te - sc_te])
+            writer.writerow([seed, "RKD", rkd_tr, rkd_te, rkd_gap, t_te - rkd_te, rkd_te - sc_te])
+
+    # Summary metrics
+    summary_path = os.path.join(results_dir, base_name + "_summary.csv")
+    with open(summary_path, "w", newline="") as f:
+        fieldnames = [
+            "model", "train_mean", "train_std", "test_mean", "test_std", "acc_gap_mean", "acc_gap_std",
+            "t_s_gap_mean", "t_s_gap_std", "dist_gain_mean", "dist_gain_std"
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in summary_rows:
+            writer.writerow(row)
+    print(f"\n[Saved] Per-seed metrics -> {per_seed_path}")
+    print(f"[Saved] Summary metrics -> {summary_path}")
 
 
 def parse_args():

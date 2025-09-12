@@ -28,6 +28,19 @@ class BaseCNN12x4x4(nn.Module):
         self.conv3 = nn.Conv2d(c2, 12, 1, bias=False)
         self.fc1 = nn.Linear(12 * 4 * 4, f_hidden, bias=True)
         self.head = nn.Linear(f_hidden, 10, bias=True)
+        self._init_weights()
+
+    def _init_weights(self):
+        """He (Kaiming) init for ReLU stack (conv + linear)."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if getattr(m, 'bias', None) is not None and m.bias is not False:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = f.relu(self.conv1(x))

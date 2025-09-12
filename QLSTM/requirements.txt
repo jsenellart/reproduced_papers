@@ -1,6 +1,6 @@
-torch>=2.0.0
+torch
 numpy
-pandas
-matplotlib
+pennylane
 scipy
-tqdm
+scikit-learn
+matplotlib

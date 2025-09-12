@@ -144,4 +144,15 @@ python implementation.py --model lstm --generator sin --epochs 3
 
 Original repository inspiration: https://github.com/ycchen1989/Quantum_Long_Short_Term_Memory
 
+If you use this reproduction, please cite the original work:
+
+```bibtex
+@article{chen2020quantumlstm,
+	title   = {Quantum Long Short-Term Memory},
+	author  = {Chen, Yao-Chi and Chen, Cheng-Hsuan and Hsu, Li-Yuan and Chen, Yen-Ting},
+	journal = {arXiv preprint arXiv:2009.01783},
+	year    = {2020}
+}
+```
+
 Adapted source retains MIT License compatibility. Each ported file includes an attribution header.

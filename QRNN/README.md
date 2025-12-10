@@ -1,14 +1,14 @@
-# QRNN — Quantum Recurrent Neural Networks (arXiv:2302.03244)
+# QRNN — Quantum Recurrent Neural Networks (Neural Networks, 2023)
 
-This project bootstraps a reproduction of the paper on quantum recurrent neural networks (QRNN, arXiv:2302.03244). It currently ships a classical RNN baseline over weather time-series data and a scaffold for extending the work toward the quantum architecture.
+This project bootstraps a reproduction of the paper on quantum recurrent neural networks (QRNN, Neural Networks, 2023). It currently ships a classical RNN baseline over weather time-series data and a scaffold for extending the work toward the quantum architecture.
 
 ## Reference and Attribution
 
-- Paper: Quantum Recurrent Neural Networks for sequential modelling (arXiv preprint, 2023)
-- Authors: See arXiv:2302.03244 for the full list
-- DOI/ArXiv: https://arxiv.org/abs/2302.03244
+- Paper: Quantum Recurrent Neural Networks for sequential modelling (Neural Networks, 2023)
+- Authors: Yanan Li, Zhimin Wang, Rongbing Han, Shangshang Shi, Jiaxin Li, Ruimin Shang, Haiyong Zheng, Guoqiang Zhong, Yongjian Gu
+- DOI/ArXiv: https://doi.org/10.1016/j.neunet.2023.09.035 (publisher page: https://www.sciencedirect.com/science/article/abs/pii/S089360802300360X)
 - Original repository (if any): not referenced here
-- License and attribution notes: cite the arXiv preprint when using results derived from this code.
+- License and attribution notes: cite the published Neural Networks article when using results derived from this code.
 
 ## Overview
 

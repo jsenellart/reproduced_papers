@@ -30,13 +30,6 @@
       "apply": {"kind": "config_path", "path": "model.params.hidden_dim"}
     },
     {
-      "flags": ["--use-kagglehub"],
-      "help": "Download the Kaggle weather dataset automatically if the local path is missing",
-      "type": "bool",
-      "default": null,
-      "apply": {"kind": "config_path", "path": "dataset.use_kagglehub"}
-    },
-    {
       "flags": ["--lr"],
       "help": "Override learning rate",
       "type": "float",

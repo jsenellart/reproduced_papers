@@ -17,6 +17,9 @@ def test_train_and_evaluate_writes_artifact(tmp_path):
     cfg = load_runtime_ready_config()
     cfg["training"]["epochs"] = 1
     cfg["dataset"]["path"] = str(PROJECT_DIR / "data" / "sample_weather.csv")
+    cfg["dataset"]["preprocess"] = None
+    cfg["dataset"]["target_column"] = "temperature"
+    cfg["dataset"]["feature_columns"] = ["temperature", "humidity"]
 
     run_dir = tmp_path / "run"
     run_dir.mkdir()
@@ -25,3 +28,4 @@ def test_train_and_evaluate_writes_artifact(tmp_path):
 
     assert (run_dir / "done.txt").exists(), "Expected completion marker to be created"
     assert (run_dir / "metrics.json").exists(), "Expected metrics to be saved"
+    assert (run_dir / "predictions.csv").exists(), "Expected predictions CSV to be saved"

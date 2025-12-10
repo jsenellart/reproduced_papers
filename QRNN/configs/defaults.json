@@ -6,37 +6,40 @@
     "device": "cpu",
     "dataset": {
         "name": "weather_prediction",
-        "path": "data/sample_weather.csv",
-        "kaggle_dataset": "thedevastator/weather-prediction",
-        "use_kagglehub": false,
-        "target_column": "temperature",
-        "feature_columns": ["temperature", "humidity"],
-        "time_column": "timestamp",
+        "path": "data/szeged-weather.csv",
+        "kaggle_dataset": "budincsevity/szeged-weather",
+        "preprocess": "szeged_weather",
+        "target_column": "max_temperature",
+        "feature_columns": [
+            "min_temperature",
+            "max_temperature",
+            "avg_humidity",
+            "avg_wind_speed",
+            "avg_pressure"
+        ],
+        "time_column": "date",
         "sequence_length": 8,
         "prediction_horizon": 1,
+        "max_rows": 1000,
         "train_ratio": 0.7,
         "val_ratio": 0.15,
         "batch_size": 16,
-        "num_workers": 0,
         "shuffle": true
     },
     "model": {
         "name": "rnn_baseline",
         "params": {
-            "hidden_dim": 64,
+            "hidden_dim": 32,
             "layers": 1,
             "dropout": 0.0
         }
     },
     "training": {
-        "epochs": 5,
+        "epochs": 10,
         "optimizer": "adam",
         "lr": 1e-3,
         "weight_decay": 0.0,
         "clip_grad_norm": 1.0
-    },
-    "evaluation": {
-        "metrics": ["mse"]
     },
     "logging": {"level": "info", "save_config_snapshot": true}
 }

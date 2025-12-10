@@ -31,13 +31,17 @@ pip install -r requirements.txt
 
 ### Command-line interface
 
-Main entry point: `implementation.py`.
+Use the repository-level runner (`implementation.py` at the repo root) with `--project QRNN`.
 
 ```bash
-python implementation.py --help
+# From the repo root
+python implementation.py --project QRNN --help
+
+# From inside this folder
+python ../implementation.py --project QRNN --help
 ```
 
-Common options (see `configs/cli.json` for the full schema):
+Common options (see `configs/cli.json` for the full schema alongside the global flags injected by the shared runner):
 
 - `--config PATH` Load an additional JSON config (merged over defaults).
 - `--epochs INT` Override `training.epochs`.
@@ -50,11 +54,14 @@ Common options (see `configs/cli.json` for the full schema):
 Example runs:
 
 ```bash
-# Use the bundled synthetic CSV for a quick smoke test
-python implementation.py --config configs/example.json --epochs 1
+# Use the bundled synthetic CSV for a quick smoke test (from repo root)
+python implementation.py --project QRNN --config QRNN/configs/example.json --epochs 1
+
+# Same run from inside QRNN/
+python ../implementation.py --project QRNN --config configs/example.json --epochs 1
 
 # Train on the Kaggle dataset (downloads on first run if needed)
-python implementation.py --config configs/example.json --use-kagglehub true --outdir runs/qrnn_baseline
+python implementation.py --project QRNN --config QRNN/configs/example.json --use-kagglehub true --outdir runs/qrnn_baseline
 ```
 
 ### Dataset setup

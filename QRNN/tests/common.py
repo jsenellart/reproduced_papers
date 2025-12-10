@@ -18,11 +18,19 @@ from runtime_lib.dtypes import resolve_config_dtypes
 
 _CLI_SCHEMA_PATH = PROJECT_DIR / "configs" / "cli.json"
 _DEFAULTS_PATH = PROJECT_DIR / "configs" / "defaults.json"
+_GLOBAL_CLI_SCHEMA_PATH = REPO_ROOT / "runtime_lib" / "global_cli.json"
+
+
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text())
 
 
 def build_project_cli_parser():
-    schema = json.loads(_CLI_SCHEMA_PATH.read_text())
+    schema = _load_json(_CLI_SCHEMA_PATH)
     schema.setdefault("arguments", [])
+    if _GLOBAL_CLI_SCHEMA_PATH.exists():
+        global_schema = _load_json(_GLOBAL_CLI_SCHEMA_PATH)
+        schema["arguments"].extend(global_schema.get("arguments", []))
     return build_cli_parser(schema)
 
 

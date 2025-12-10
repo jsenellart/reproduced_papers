@@ -34,9 +34,16 @@ def preprocess_szeged_weather(raw_csv: Path, output_csv: Path) -> Path:
             if existing_cols == SZEGED_COLUMNS:
                 LOGGER.info("Using cached preprocessed dataset at %s", output_csv)
                 return output_csv
-            LOGGER.info("Rebuilding preprocessed dataset due to mismatched columns: %s", output_csv)
+            LOGGER.info(
+                "Rebuilding preprocessed dataset due to mismatched columns: %s",
+                output_csv,
+            )
         except Exception as exc:  # pragma: no cover - best effort caching
-            LOGGER.info("Rebuilding preprocessed dataset due to read error (%s): %s", exc, output_csv)
+            LOGGER.info(
+                "Rebuilding preprocessed dataset due to read error (%s): %s",
+                exc,
+                output_csv,
+            )
 
     df = pd.read_csv(raw_csv)
     dataset_name = raw_csv.name

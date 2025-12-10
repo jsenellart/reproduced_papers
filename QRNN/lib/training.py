@@ -38,14 +38,22 @@ def evaluate_metrics(
 
         mask = batch_y != 0
         if mask.any():
-            t_mean = torch.tensor(target_mean if target_mean is not None else 0.0, device=batch_y.device, dtype=batch_y.dtype)
-            t_std = torch.tensor(target_std if target_std is not None else 1.0, device=batch_y.device, dtype=batch_y.dtype)
+            t_mean = torch.tensor(
+                target_mean if target_mean is not None else 0.0,
+                device=batch_y.device,
+                dtype=batch_y.dtype,
+            )
+            t_std = torch.tensor(
+                target_std if target_std is not None else 1.0,
+                device=batch_y.device,
+                dtype=batch_y.dtype,
+            )
             raw_t = batch_y[mask] * t_std + t_mean
             raw_p = preds[mask] * t_std + t_mean
             scale = target_scale if target_scale is not None else 0.0
             denom = torch.clamp(raw_t.abs(), min=max(1e-6, scale))
             rel = ((raw_t - raw_p) / denom).detach()
-            rel_sq_sum += torch.sum(rel ** 2).item()
+            rel_sq_sum += torch.sum(rel**2).item()
             rel_count += rel.numel()
 
     loss_value = total_loss / max(total_samples, 1)
@@ -113,14 +121,22 @@ def fit(
 
     history: list[dict[str, float]] = []
     for epoch in range(1, epochs + 1):
-        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device, grad_clip)
+        train_loss = train_one_epoch(
+            model, train_loader, criterion, optimizer, device, grad_clip
+        )
         val_loss, val_acc = evaluate_metrics(
             model, val_loader, criterion, device, target_scale, target_mean, target_std
         )
         test_loss = test_acc = None
         if test_loader is not None and len(test_loader.dataset) > 0:  # type: ignore[arg-type]
             test_loss, test_acc = evaluate_metrics(
-                model, test_loader, criterion, device, target_scale, target_mean, target_std
+                model,
+                test_loader,
+                criterion,
+                device,
+                target_scale,
+                target_mean,
+                target_std,
             )
 
         LOGGER.info(
@@ -159,4 +175,4 @@ def fit(
     return metrics
 
 
-__all__ = ["fit", "train_one_epoch", "evaluate"]
+__all__ = ["fit", "train_one_epoch", "evaluate_metrics"]

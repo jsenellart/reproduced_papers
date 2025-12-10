@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import shutil
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pandas as pd
 import torch
@@ -113,7 +113,9 @@ class WeatherSequenceDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
             raise ValueError("prediction_horizon must be positive")
 
         self.features = _select_columns(data, feature_columns).to_numpy(dtype=float)
-        self.targets = _select_columns(data, [target_column]).to_numpy(dtype=float).ravel()
+        self.targets = (
+            _select_columns(data, [target_column]).to_numpy(dtype=float).ravel()
+        )
         self.sequence_length = sequence_length
         self.prediction_horizon = prediction_horizon
         self.dtype = dtype
@@ -124,7 +126,9 @@ class WeatherSequenceDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         self.target_std = torch.tensor(1.0, dtype=self.dtype)
 
     def __len__(self) -> int:
-        return max(0, len(self.targets) - self.sequence_length - self.prediction_horizon + 1)
+        return max(
+            0, len(self.targets) - self.sequence_length - self.prediction_horizon + 1
+        )
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         start = idx
@@ -148,7 +152,9 @@ class WeatherSequenceDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         self.target_mean = target_mean
         self.target_std = target_std
 
-    def compute_stats_for_indices(self, indices: list[int]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def compute_stats_for_indices(
+        self, indices: list[int]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         feature_tensor = torch.as_tensor(self.features[indices], dtype=self.dtype)
         targets_tensor = torch.as_tensor(self.targets[indices], dtype=self.dtype)
         feat_mean = feature_tensor.mean(dim=0, keepdim=True)
@@ -186,7 +192,9 @@ def build_dataloaders(cfg: dict) -> tuple[DataLoader, DataLoader, DataLoader, di
 
     total_len = len(dataset)
     if total_len == 0:
-        raise ValueError("Dataset is too small for the requested sequence and horizon lengths")
+        raise ValueError(
+            "Dataset is too small for the requested sequence and horizon lengths"
+        )
 
     train_ratio = float(dataset_cfg.get("train_ratio", 0.7))
     val_ratio = float(dataset_cfg.get("val_ratio", 0.15))
@@ -195,7 +203,9 @@ def build_dataloaders(cfg: dict) -> tuple[DataLoader, DataLoader, DataLoader, di
     train_indices = list(range(0, train_cutoff))
     val_indices = list(range(train_cutoff, val_cutoff))
 
-    feat_mean, feat_std, tgt_mean, tgt_std = dataset.compute_stats_for_indices(train_indices)
+    feat_mean, feat_std, tgt_mean, tgt_std = dataset.compute_stats_for_indices(
+        train_indices
+    )
     dataset.set_normalization(feat_mean, feat_std, tgt_mean, tgt_std)
 
     train_ds = torch.utils.data.Subset(dataset, train_indices)
@@ -238,7 +248,9 @@ def build_dataloaders(cfg: dict) -> tuple[DataLoader, DataLoader, DataLoader, di
         "feature_std": dataset.feature_std.squeeze().tolist(),
         "target_mean": float(dataset.target_mean),
         "target_std": float(dataset.target_std),
-        "target_abs_mean": float(torch.mean(torch.abs(torch.as_tensor(dataset.targets)))),
+        "target_abs_mean": float(
+            torch.mean(torch.abs(torch.as_tensor(dataset.targets)))
+        ),
         "dataset_path": str(csv_path),
         "splits": {
             "train": len(train_ds),

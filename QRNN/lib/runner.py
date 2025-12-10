@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -23,7 +22,9 @@ def _build_model(cfg: dict, input_size: int) -> RNNRegressor:
     hidden_dim = int(params.get("hidden_dim", 64))
     layers = int(params.get("layers", 1))
     dropout = float(params.get("dropout", 0.0))
-    model = RNNRegressor(input_size=input_size, hidden_dim=hidden_dim, layers=layers, dropout=dropout)
+    model = RNNRegressor(
+        input_size=input_size, hidden_dim=hidden_dim, layers=layers, dropout=dropout
+    )
     return model
 
 
@@ -61,13 +62,17 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
     device = torch.device(cfg.get("device", "cpu"))
     cfg_with_metadata = dict(cfg)
     cfg_with_metadata["metadata"] = metadata
-    metrics = fit(model, train_loader, val_loader, test_loader, cfg_with_metadata, run_dir)
+    metrics = fit(
+        model, train_loader, val_loader, test_loader, cfg_with_metadata, run_dir
+    )
 
     model_path = run_dir / "rnn_baseline.pt"
     torch.save(model.state_dict(), model_path)
     logger.info("Saved model checkpoint to %s", model_path)
 
-    accuracies = _write_predictions_csv(model, cfg_with_metadata, train_loader, val_loader, test_loader, device, run_dir)
+    accuracies = _write_predictions_csv(
+        model, cfg_with_metadata, train_loader, val_loader, test_loader, device, run_dir
+    )
     if accuracies:
         metrics["accuracy"] = accuracies
         metrics_path = run_dir / "metrics.json"
@@ -80,10 +85,17 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
 
 
 def _build_prediction_loaders(
-    train_loader: DataLoader, val_loader: DataLoader, test_loader: DataLoader, batch_size: int
-) -> Dict[str, DataLoader]:
-    loaders: Dict[str, DataLoader] = {}
-    for name, loader in (("train", train_loader), ("val", val_loader), ("test", test_loader)):
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    batch_size: int,
+) -> dict[str, DataLoader]:
+    loaders: dict[str, DataLoader] = {}
+    for name, loader in (
+        ("train", train_loader),
+        ("val", val_loader),
+        ("test", test_loader),
+    ):
         if loader is None or len(loader.dataset) == 0:  # type: ignore[arg-type]
             continue
         subset = loader.dataset
@@ -112,7 +124,9 @@ def _write_predictions_csv(
     target_scale = metadata.get("target_abs_mean")
     target_mean = metadata.get("target_mean", 0.0)
     target_std = metadata.get("target_std", 1.0)
-    loaders = _build_prediction_loaders(train_loader, val_loader, test_loader, batch_size)
+    loaders = _build_prediction_loaders(
+        train_loader, val_loader, test_loader, batch_size
+    )
 
     rows = []
     with torch.no_grad():

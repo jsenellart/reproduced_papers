@@ -5,15 +5,15 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
-from runtime_lib.cli import build_cli_parser
-from runtime_lib.config import load_config
-from runtime_lib.dtypes import resolve_config_dtypes
-
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PROJECT_DIR.parent
 for path in (REPO_ROOT, PROJECT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
+
+from runtime_lib.cli import build_cli_parser
+from runtime_lib.config import load_config
+from runtime_lib.dtypes import resolve_config_dtypes
 
 
 _CLI_SCHEMA_PATH = PROJECT_DIR / "configs" / "cli.json"

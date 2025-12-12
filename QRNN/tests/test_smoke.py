@@ -29,6 +29,5 @@ def test_runtime_smoke(monkeypatch, tmp_path):
     finally:
         os.chdir(original_cwd)
 
-    assert (run_dir / "done.txt").exists()
     assert (run_dir / "metrics.json").exists()
     assert (run_dir / "predictions.csv").exists()

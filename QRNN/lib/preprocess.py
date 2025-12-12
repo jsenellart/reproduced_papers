@@ -71,6 +71,7 @@ def preprocess_szeged_weather(raw_csv: Path, output_csv: Path) -> Path:
 
     df = df.dropna(subset=["Formatted Date"] + numeric_cols)
     df["date"] = df["Formatted Date"].dt.tz_convert(None).dt.date
+    df["month"] = df["Formatted Date"].dt.month
 
     grouped = (
         df.groupby("date")
@@ -80,6 +81,7 @@ def preprocess_szeged_weather(raw_csv: Path, output_csv: Path) -> Path:
                 "Humidity": "mean",
                 "Wind Speed (km/h)": "mean",
                 "Pressure (millibars)": "mean",
+                "month": "first",
             }
         )
         .reset_index()
@@ -93,6 +95,7 @@ def preprocess_szeged_weather(raw_csv: Path, output_csv: Path) -> Path:
         "avg_humidity",
         "avg_wind_speed",
         "avg_pressure",
+        "month",
     ]
     grouped["date"] = grouped["date"].astype(str)
 

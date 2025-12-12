@@ -83,6 +83,10 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     logger.info("Saved metadata to %s", metadata_path)
 
+    done_marker = run_dir / "done.txt"
+    done_marker.write_text("ok", encoding="utf-8")
+    logger.info("Saved completion marker to %s", done_marker)
+
 
 def _build_prediction_loaders(
     train_loader: DataLoader,

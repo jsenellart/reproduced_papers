@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from collections.abc import Iterable, Sequence
 from pathlib import Path
@@ -88,11 +89,32 @@ def resolve_dataset_path(dataset_cfg: dict) -> Path:
     )
 
 
+def _sanitize_column_name(name: str) -> str:
+    no_paren = re.sub(r"\([^)]*\)", "", name)
+    return re.sub(r"[^a-z0-9]", "", no_paren.lower())
+
+
 def _select_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
-    missing = [col for col in columns if col not in df.columns]
+    alias_map: dict[str, str] = {}
+    for existing in df.columns:
+        sanitized = _sanitize_column_name(existing)
+        alias_map.setdefault(sanitized, existing)
+
+    resolved: list[str] = []
+    missing: list[str] = []
+    for requested in columns:
+        if requested in df.columns:
+            resolved.append(requested)
+            continue
+        alias = alias_map.get(_sanitize_column_name(requested))
+        if alias:
+            resolved.append(alias)
+        else:
+            missing.append(requested)
+
     if missing:
         raise ValueError(f"Missing columns in dataset: {missing}")
-    return df[list(columns)].copy()
+    return df[resolved].copy()
 
 
 class WeatherSequenceDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):

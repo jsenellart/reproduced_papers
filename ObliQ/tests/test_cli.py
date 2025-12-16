@@ -30,3 +30,15 @@ def test_train_and_evaluate_writes_artifacts(tmp_path: Path):
     assert "objective" in contents
     assert (tmp_path / "qubo.npy").exists()
     assert (tmp_path / "solution.npy").exists()
+
+
+def test_maxcut_generation(tmp_path: Path):
+    cfg = load_runtime_ready_config()
+    cfg["problem"]["type"] = "maxcut"
+    cfg["problem"].setdefault("graph", {})
+    cfg["problem"]["graph"]["num_nodes"] = 4
+    cfg["solver"]["method"] = "exhaustive"
+
+    runner.train_and_evaluate(cfg, tmp_path)
+
+    assert (tmp_path / "results.json").exists()

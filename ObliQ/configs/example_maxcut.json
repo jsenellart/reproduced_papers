@@ -1,0 +1,21 @@
+{
+  "description": "Example MaxCut instance on an Erdos-Renyi graph",
+  "problem": {
+    "type": "maxcut",
+    "graph": {
+      "num_nodes": 6,
+      "edge_prob": 0.4
+    }
+  },
+  "solver": {
+    "method": "annealing",
+    "configs": {
+      "annealing": {
+        "max_iter": 1500,
+        "temperature": 1.2,
+        "cooling": 0.993,
+        "restarts": 10
+      }
+    }
+  }
+}

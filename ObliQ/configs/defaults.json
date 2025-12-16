@@ -12,6 +12,7 @@
         "graph": {
             "num_nodes": 4,
             "num_colors": 3,
+            "edge_prob": 0.5,
             "edges": [
                 [0, 1],
                 [1, 2],

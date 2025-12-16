@@ -6,6 +6,7 @@ This folder reproduces the QUBO generation and baseline solving pieces of **Obli
 
 ## What’s implemented
 - QUBO builders that follow the authors’ routines for random instances (`lib/reference/save_data.py`) and graph coloring encodings (`lib/reference/save_data_graph.py`, ported from the original `graph_to_qubo.py`).
+- MaxCut-to-QUBO conversion lifted from the CVaR-VQE benchmarking drop (`cvar-vqe/lib/qubo.py`), so you can sample Erdos-Renyi (or user-defined) graphs and plug them straight into the shared solver stack by setting `problem.type` to `maxcut`.
 - Classical solvers: exact exhaustive search for small sizes and a lightweight simulated-annealing baseline for larger problems.
 - Shared CLI + config compatible with the repository-wide runner so experiments drop outputs in `outdir/run_*`.
 - Paper context baked into the configs/README for quick recall.
@@ -30,6 +31,9 @@ python implementation.py --project ObliQ --config configs/example_random.json
 
 # Graph coloring QUBO (4 nodes, 3 colors) with annealing
 python implementation.py --project ObliQ --config configs/example_graph.json --solver.method annealing
+
+# MaxCut QUBO using the shared generator (Erdos-Renyi graph)
+python implementation.py --project ObliQ --config configs/example_maxcut.json --solver.method annealing
 
 # Quantum runs — Perceval is required
 python implementation.py --project ObliQ --config configs/example_random.json --solver.method obliq         # hybrid: static + VQC refinement
@@ -68,6 +72,7 @@ Outputs land in `outdir/run_YYYYMMDD-HHMMSS/` with:
 - `configs/defaults.json` — shared defaults (seed, dtype, base outdir, solver knobs).
 - `configs/example_random.json` — random QUBO demo.
 - `configs/example_graph.json` — graph-coloring QUBO demo.
+- `configs/example_maxcut.json` — Erdos-Renyi MaxCut demo (reuses the CVaR-VQE conversion logic).
 - `configs/cli.json` — CLI arguments mapped to config paths (`problem.*`, `solver.*`, etc.).
 
 ## Using the reference code

@@ -1,5 +1,7 @@
 numpy>=1.26
 scipy>=1.11
 sympy>=1.12
-perceval-quandela==0.11.0
+perceval-quandela>=1.0.0
+merlinquantum>=0.2.0
 tqdm>=4.66
+networkx

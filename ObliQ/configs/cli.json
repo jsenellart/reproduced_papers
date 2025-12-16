@@ -37,6 +37,13 @@
       "apply": {"kind": "config_path", "path": "problem.graph.num_colors"}
     },
     {
+      "flags": ["--graph.edge-prob"],
+      "help": "Edge probability for random graph generation (MaxCut)",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.graph.edge_prob"}
+    },
+    {
       "flags": ["--solver.method"],
       "help": "Solver: exhaustive, annealing, obliq, obliq-static, or vqc",
       "type": "str",

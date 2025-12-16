@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+import networkx as nx
 import numpy as np
 
 from .reference import qubo_basics
@@ -103,6 +104,53 @@ def _build_graph_instance(problem_cfg: dict[str, Any]) -> QuboInstance:
     return QuboInstance(matrix=matrix, constant=constant, description=description, metadata=metadata)
 
 
+def _graph_from_config(graph_cfg: dict[str, Any], *, seed: int) -> nx.Graph:
+    num_nodes = graph_cfg.get("num_nodes")
+    edges = graph_cfg.get("edges")
+    edge_prob = graph_cfg.get("edge_prob", graph_cfg.get("probability", 0.5))
+
+    if edges:
+        inferred_nodes = {int(idx) for edge in edges for idx in edge}
+        if num_nodes is None:
+            num_nodes = (max(inferred_nodes) + 1) if inferred_nodes else 0
+        graph = nx.Graph()
+        graph.add_nodes_from(range(int(num_nodes)))
+        graph.add_edges_from((int(u), int(v)) for u, v in edges)
+        return graph
+
+    if num_nodes is None:
+        num_nodes = 4
+    prob = float(edge_prob)
+    rng_seed = int(seed)
+    return nx.erdos_renyi_graph(int(num_nodes), prob, seed=rng_seed)
+
+
+def graph_to_matrix_maxcut(graph: nx.Graph) -> np.ndarray:
+    adjacency = nx.to_numpy_array(graph, dtype=float)
+    degrees = np.array([graph.degree[node] for node in graph.nodes()], dtype=float)
+    np.fill_diagonal(adjacency, -degrees)
+    return adjacency
+
+
+def _build_maxcut_instance(
+    problem_cfg: dict[str, Any],
+    *,
+    seed: int,
+) -> QuboInstance:
+    graph_cfg = problem_cfg.get("graph", {})
+    graph = _graph_from_config(graph_cfg, seed=seed)
+    matrix = graph_to_matrix_maxcut(graph)
+    metadata = {
+        "type": "maxcut",
+        "num_nodes": graph.number_of_nodes(),
+        "num_edges": graph.number_of_edges(),
+        "edge_prob": float(graph_cfg.get("edge_prob", graph_cfg.get("probability", 0.5))),
+        "edges": [list(edge) for edge in graph.edges()],
+    }
+    description = f"maxcut_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+    return QuboInstance(matrix=matrix, constant=0.0, description=description, metadata=metadata)
+
+
 def build_problem(
     problem_cfg: dict[str, Any],
     *,
@@ -125,6 +173,8 @@ def build_problem(
         )
     if problem_type in {"graph", "graph-coloring", "graph_coloring"}:
         return _build_graph_instance(problem_cfg)
+    if problem_type == "maxcut":
+        return _build_maxcut_instance(problem_cfg, seed=seed)
 
     raise ValueError(f"Unknown problem type: {problem_type}")
 
@@ -171,4 +221,5 @@ __all__ = [
     "build_problem",
     "solve_problem",
     "qubo_objective",
+    "graph_to_matrix_maxcut",
 ]

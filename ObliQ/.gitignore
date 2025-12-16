@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+outdir/
+*.npy
+*.npz
+*.pkl
+*.log
+notes/

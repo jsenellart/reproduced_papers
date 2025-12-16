@@ -1,0 +1,103 @@
+{
+  "description": "ObliQ QUBO generator and classical solvers",
+  "arguments": [
+    {
+      "flags": ["--problem.type"],
+      "help": "Problem type: random or graph-coloring",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.type"}
+    },
+    {
+      "flags": ["--problem.size"],
+      "help": "Number of binary variables for random QUBO",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.size"}
+    },
+    {
+      "flags": ["--problem.penalty"],
+      "help": "Penalty coefficient for constraint violations",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.penalty"}
+    },
+    {
+      "flags": ["--graph.num-nodes"],
+      "help": "Node count for graph-coloring instances",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.graph.num_nodes"}
+    },
+    {
+      "flags": ["--graph.num-colors"],
+      "help": "Color count for graph-coloring instances",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "problem.graph.num_colors"}
+    },
+    {
+      "flags": ["--solver.method"],
+      "help": "Solver: exhaustive, annealing, obliq, obliq-static, or vqc",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.method"}
+    },
+    {
+      "flags": ["--solver.max-iter"],
+      "help": "Iterations for annealing",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.max_iter"}
+    },
+    {
+      "flags": ["--solver.restarts"],
+      "help": "Number of annealing restarts",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.restarts"}
+    },
+    {
+      "flags": ["--solver.temperature"],
+      "help": "Initial temperature for annealing",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.temperature"}
+    },
+    {
+      "flags": ["--solver.cooling"],
+      "help": "Cooling rate for annealing",
+      "type": "float",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.cooling"}
+    },
+    {
+      "flags": ["--quantum.enabled"],
+      "help": "Toggle quantum photonic solver (requires perceval)",
+      "type": "bool",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "quantum.enabled"}
+    },
+    {
+      "flags": ["--quantum.method"],
+      "help": "Quantum solver: obliq-static or vqc",
+      "type": "str",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "quantum.method"}
+    },
+    {
+      "flags": ["--quantum.nsamples"],
+      "help": "Number of photonic samples/shots",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "quantum.nsamples"}
+    },
+    {
+      "flags": ["--quantum.restarts"],
+      "help": "Random restarts for VQC parameter search",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "quantum.restarts"}
+    }
+  ]
+}

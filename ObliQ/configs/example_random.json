@@ -1,0 +1,12 @@
+{
+    "description": "Random 6-variable QUBO solved with exhaustive search",
+    "problem": {
+        "type": "random",
+        "size": 10,
+        "low": -2.0,
+        "high": 2.0
+    },
+    "solver": {
+        "method": "exhaustive"
+    }
+}

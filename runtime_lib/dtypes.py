@@ -4,15 +4,9 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
-try:  # pragma: no cover - optional dependency
-    import torch
+import torch
 
-    _TORCH_AVAILABLE = True
-    _TORCH_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - torch not installed
-    torch = None  # type: ignore[assignment]
-    _TORCH_AVAILABLE = False
-    _TORCH_IMPORT_ERROR = exc
+_TORCH_IMPORT_ERROR: Exception | None = None
 
 
 class DtypeSpec(NamedTuple):
@@ -23,7 +17,7 @@ class DtypeSpec(NamedTuple):
     label:
         Canonical lowercase label (e.g., ``"float32"``) or ``"auto"``/``None``.
     torch:
-        The resolved ``torch.dtype`` object when available, otherwise ``None``.
+        The resolved ``torch.dtype`` object.
     """
 
     label: str | None
@@ -45,23 +39,12 @@ _CANONICAL_FROM_ALIAS: dict[str, str] = {
     "fp64": "float64",
 }
 
-if _TORCH_AVAILABLE:  # pragma: no branch - depends on import success
-    _TORCH_FROM_CANONICAL: dict[str, torch.dtype] = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32,
-        "float64": torch.float64,
-    }
-else:  # pragma: no cover - executed when torch is missing
-    _TORCH_FROM_CANONICAL = {}
-
-
-def _require_torch() -> None:
-    if _TORCH_AVAILABLE:
-        return
-    raise RuntimeError(
-        "PyTorch is required to resolve dtype options but could not be imported"
-    ) from _TORCH_IMPORT_ERROR
+_TORCH_FROM_CANONICAL: dict[str, torch.dtype] = {
+    "float16": torch.float16,
+    "bfloat16": torch.bfloat16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+}
 
 
 def coerce_dtype_spec(value: Any) -> DtypeSpec | None:
@@ -75,7 +58,7 @@ def coerce_dtype_spec(value: Any) -> DtypeSpec | None:
     if isinstance(value, DtypeSpec):
         return value
 
-    if _TORCH_AVAILABLE and isinstance(value, torch.dtype):
+    if isinstance(value, torch.dtype):
         return DtypeSpec(str(value).split(".")[-1], value)
 
     if isinstance(value, str):
@@ -91,7 +74,6 @@ def coerce_dtype_spec(value: Any) -> DtypeSpec | None:
             raise ValueError(
                 f"Unsupported dtype '{value}'. Allowed values: {', '.join(allowed)}"
             )
-        _require_torch()
         return DtypeSpec(canonical, _TORCH_FROM_CANONICAL[canonical])
 
     if isinstance(value, dict):
@@ -139,7 +121,7 @@ def dtype_torch(value: Any) -> Any:
 
     if isinstance(value, DtypeSpec):
         return value.torch
-    if _TORCH_AVAILABLE and isinstance(value, torch.dtype):
+    if isinstance(value, torch.dtype):
         return value
     return None
 

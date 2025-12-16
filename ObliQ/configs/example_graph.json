@@ -1,0 +1,24 @@
+{
+    "description": "Graph coloring QUBO (4 nodes, 3 colors) solved with annealing",
+    "problem": {
+        "type": "graph-coloring",
+        "penalty": 4.0,
+        "graph": {
+            "num_nodes": 4,
+            "num_colors": 3,
+            "edges": [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+                [3, 0]
+            ]
+        }
+    },
+    "solver": {
+        "method": "annealing",
+        "max_iter": 5000,
+        "temperature": 2.5,
+        "cooling": 0.997,
+        "restarts": 10
+    }
+}

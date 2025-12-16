@@ -1,0 +1,46 @@
+{
+    "description": "Defaults for ObliQ QUBO generation and classical solvers",
+    "seed": 7,
+    "dtype": "float32",
+    "outdir": "outdir",
+    "problem": {
+        "type": "random",
+        "size": 6,
+        "low": -2.0,
+        "high": 2.0,
+        "penalty": 4.0,
+        "graph": {
+            "num_nodes": 4,
+            "num_colors": 3,
+            "edges": [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+                [3, 0]
+            ]
+        }
+    },
+    "solver": {
+        "method": "exhaustive",
+        "max_iter": 2000,
+        "temperature": 1.0,
+        "cooling": 0.995,
+        "restarts": 5
+    },
+    "logging": {
+        "level": "info",
+        "save_config_snapshot": true
+    },
+    "quantum": {
+        "enabled": false,
+        "method": "obliq-static",
+        "nsamples": 1000,
+        "time_steps": 1,
+        "backend": "CliffordClifford2017",
+        "use_remote": false,
+        "token": "",
+        "num_rep": 10,
+        "graph_val": 0,
+        "restarts": 3
+    }
+}

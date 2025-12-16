@@ -40,11 +40,13 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
         data_dir=data_dir,
     )
 
-    quantum_methods = {"obliq", "obliq-static", "vqc"}
-    classical_method = solver_cfg.get("method", "exhaustive").lower()
+    solver_method = (solver_cfg.get("method") or "exhaustive").lower()
+    method_configs = solver_cfg.get("configs", {})
+    method_cfg = dict(method_configs.get(solver_method, {}))
+    method_cfg.setdefault("seed", seed)
+    method_cfg["method"] = solver_method
 
-    quantum_cfg = dict(cfg.get("quantum", {}))
-    quantum_cfg.setdefault("seed", seed)
+    quantum_methods = {"obliq", "obliq-static", "vqc"}
 
     results: dict[str, object] = {
         "description": instance.description,
@@ -53,40 +55,22 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
         "metadata": {**instance.metadata, "edges": _serialize_edges(instance.metadata)},
     }
 
-    if classical_method in quantum_methods:
-        quantum_cfg["enabled"] = True
-        quantum_cfg["method"] = classical_method
+    if solver_method in quantum_methods:
         q_result = maybe_run_quantum(
             instance.matrix,
-            quantum_cfg,
+            method_cfg,
             constant=instance.constant,
-            graph_val=int(quantum_cfg.get("graph_val", 0)),
+            graph_val=int(method_cfg.get("graph_val", 0)),
         )
-        if q_result:
-            _save_arrays(run_dir, instance, np.array(q_result.solution, dtype=int))
-            results["solver"] = q_result.solver
-            results["objective"] = q_result.objective
-            results["solution"] = q_result.solution
-            results["objective_check"] = qubo_objective(
-                instance.matrix, np.array(q_result.solution), instance.constant
-            )
-        else:
-            logger.warning("Quantum solver unavailable; falling back to classical solver.")
-            fallback_cfg = dict(solver_cfg)
-            fallback_cfg["method"] = fallback_cfg.get("fallback_method", "exhaustive")
-            solution, value, method = solve_problem(instance, fallback_cfg, seed=seed)
-            _save_arrays(run_dir, instance, solution)
-            results.update(
-                {
-                    "solver": f"fallback-{method}",
-                    "objective": value,
-                    "solution": solution.tolist(),
-                }
-            )
-            if np.any(solution):
-                results["objective_check"] = qubo_objective(instance.matrix, solution, instance.constant)
+        _save_arrays(run_dir, instance, np.array(q_result.solution, dtype=int))
+        results["solver"] = q_result.solver
+        results["objective"] = q_result.objective
+        results["solution"] = q_result.solution
+        results["objective_check"] = qubo_objective(
+            instance.matrix, np.array(q_result.solution), instance.constant
+        )
     else:
-        solution, value, method = solve_problem(instance, solver_cfg, seed=seed)
+        solution, value, method = solve_problem(instance, method_cfg, seed=seed)
         _save_arrays(run_dir, instance, solution)
 
         results.update(
@@ -98,20 +82,6 @@ def train_and_evaluate(cfg: dict, run_dir: Path) -> None:
         )
         if np.any(solution):
             results["objective_check"] = qubo_objective(instance.matrix, solution, instance.constant)
-
-        if quantum_cfg.get("enabled"):
-            q_result = maybe_run_quantum(
-                instance.matrix,
-                quantum_cfg,
-                constant=instance.constant,
-                graph_val=int(quantum_cfg.get("graph_val", 0)),
-            )
-            if q_result:
-                results["quantum"] = {
-                    "solver": q_result.solver,
-                    "solution": q_result.solution,
-                    "objective": q_result.objective,
-                }
 
     (run_dir / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     obj_val = results.get("objective")

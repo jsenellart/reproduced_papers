@@ -1,13 +1,16 @@
 # ObliQ — Photonic QUBO Circuits (SIGMETRICS 2025)
 
-This folder reproduces the QUBO generation and baseline solving pieces of **ObliQ: Solving Quadratic Unconstrained Binary Optimization Problems on Real Photonic Quantum Machines** (SIGMETRICS 2025, Aditya Ranjan *et al.*). The upstream Perceval implementation released by the authors is vendored in `ref/` and used here to mirror their QUBO construction choices.
+This folder reproduces the QUBO generation and baseline solving pieces of **ObliQ: Solving Quadratic Unconstrained Binary Optimization Problems on Real Photonic Quantum Machines** (SIGMETRICS 2025, Aditya Ranjan *et al.*). The upstream Perceval implementation released by the authors is mirrored inside `lib/reference/` (trimmed modules that the runner imports directly), while the pristine vendor drop lives under `ref/` for exploratory use.
+
+> **Reference code availability** — The authors’ full release is archived on Zenodo: <https://doi.org/10.5281/zenodo.17342911>. Download that archive and unpack it if you want the untouched sources locally; only the curated `lib/reference/` subset is tracked in this repo.
 
 ## What’s implemented
-- QUBO builders that follow the authors’ routines for random instances (`ref/save_data.py`) and graph coloring encodings (`ref/save_data_graph/graph_to_qubo.py`).
+- QUBO builders that follow the authors’ routines for random instances (`lib/reference/save_data.py`) and graph coloring encodings (`lib/reference/save_data_graph.py`, ported from the original `graph_to_qubo.py`).
 - Classical solvers: exact exhaustive search for small sizes and a lightweight simulated-annealing baseline for larger problems.
 - Shared CLI + config compatible with the repository-wide runner so experiments drop outputs in `outdir/run_*`.
 - Paper context baked into the configs/README for quick recall.
-- Quantum hooks: photonic runs using the authors’ Perceval circuits (`circ_init.py` for static ObliQ, `circ_vqc.py` for VQC). Select via `--solver.method obliq-static` or `--solver.method vqc` (Perceval required).
+- Quantum hooks: photonic runs using the authors’ Perceval circuits (`lib/reference/circ_init.py` for static ObliQ, `lib/reference/circ_vqc.py` for VQC). Select via `--solver.method obliq-static` or `--solver.method vqc` (Perceval required).
+- MerLin-enhanced VQC: `lib/quantum.py` builds a differentiable replica of the ObliQ VQC inside MerLin, giving us a fast gradient-based refinement option in addition to the original Perceval random search.
 
 ### Paper highlights (analysis)
 - ObliQ encodes QUBO matrices directly into photonic beam-splitter angles (“anchor-point” static circuit) to get a one-shot candidate solution, then optionally stacks a VQC to refine it (hybrid ObliQ).
@@ -31,23 +34,26 @@ python implementation.py --project ObliQ --config configs/example_graph.json --s
 # Quantum runs — Perceval is required
 python implementation.py --project ObliQ --config configs/example_random.json --solver.method obliq         # hybrid: static + VQC refinement
 python implementation.py --project ObliQ --config configs/example_random.json --solver.method obliq-static # static anchor only
-python implementation.py --project ObliQ --config configs/example_random.json --solver.method vqc --quantum.restarts 5
+python implementation.py --project ObliQ --config configs/example_random.json --solver.method vqc --solver.vqc.restarts 5
 ```
+MerLin acceleration is enabled by default for `--solver.method vqc` and within hybrid ObliQ runs when `solver.configs.vqc.use_merlin` is true. Set that flag to `false` in a config file to fall back to the original Perceval-only random VQC search.
 Random QUBOs are cached under `data/random_instances/` using the run seed (e.g., `data/random_instances/n6/seed7_low-2.0_high2.0.npy`) so different solvers compare on identical problems.
 
 ### Run on qubo-benchmark instances (no edits to the benchmark repo)
 ```bash
 python utils/run_qubo_benchmark.py \
   --config qubo-benchmark/benchmark/config.yml \
-  --solver annealing \
+  --solver.method annealing \
   --results-dir qubo-benchmark/results_obliq
 
 # Quantum pass over the same instances
 python utils/run_qubo_benchmark.py \
   --config qubo-benchmark/benchmark/config.yml \
-  --quantum --quantum-method obliq-static
+  --solver.method obliq-static \
+  --results-dir qubo-benchmark/results_obliq
 ```
 Outputs are stored under `qubo-benchmark/results_obliq/` with the same pickle schema as the benchmark’s solvers.
+Both `--config` and `--results-dir` accept absolute paths or ones relative to `ObliQ/`, so the commands above work no matter where you launch them from inside the project.
 ```
 
 Main entry point: repository root `implementation.py` invoked with `--project ObliQ` (delegates to the shared runner). CLI schema lives in `configs/cli.json`; any flag there overrides the JSON config.
@@ -65,10 +71,6 @@ Outputs land in `outdir/run_YYYYMMDD-HHMMSS/` with:
 - `configs/cli.json` — CLI arguments mapped to config paths (`problem.*`, `solver.*`, etc.).
 
 ## Using the reference code
-- Author drop-in lives under `ref/` (Perceval circuits, plotting, and data scripts). Our `lib/qubo.py` lifts their QUBO construction logic so you can swap in full photonic runs later without rewriting the generators. Quantum wrappers in `lib/quantum.py` call `ref/circ_init.py` (ObliQ static) and `ref/circ_vqc.py` (VQC) directly; Perceval is a required dependency.
-- To explore the original circuits, start from `ref/circ_init.py` (static anchor-point embedding) and `ref/circ_vqc.py` (hybrid VQC layers).
-
-## Next steps
-1) Wire Perceval backends from `ref/` into `lib/runner.py` to compare photonic outputs against the classical solvers.  
-2) Port the authors’ graph datasets and plotting scripts for side-by-side metric recreation.  
-3) Extend the annealer (batch restarts, adaptive cooling) or hook into a MILP/QUBO solver for larger benchmarks.
+- The active drop-in lives under `lib/reference/` (`circ_init*.py`, `circ_vqc.py`, `save_data*.py`, etc.). These modules are imported directly by `lib/quantum.py` and `lib/qubo.py`, so we stay self-contained without mutating the vendor sources.
+- If you download the upstream release into `ref/` (see the Zenodo link above), you can use those Perceval scripts, experiment harnesses, and plotting utilities for comparison runs; `_import_ref_module` in `lib/quantum.py` can load additional circuit modules from that directory when needed.
+- When hacking on the circuits, prefer editing the `lib/reference/` copies so that runs launched via the shared runner automatically pick up the changes while the pristine `ref/` tree remains untouched.

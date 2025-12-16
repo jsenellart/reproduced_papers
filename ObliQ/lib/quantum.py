@@ -265,10 +265,7 @@ def solve_obliq_random(Q: np.ndarray, anchor_state: list[int], cfg: dict, graph_
     )
 
 
-def maybe_run_quantum(instance_matrix: np.ndarray, cfg: dict, *, constant: float, graph_val: int = 0) -> QuantumResult | None:
-    if not cfg.get("enabled", False):
-        return None
-
+def maybe_run_quantum(instance_matrix: np.ndarray, cfg: dict, *, constant: float, graph_val: int = 0) -> QuantumResult:
     method = cfg.get("method", "obliq-static").lower()
     if method == "obliq":
         result = solve_obliq(instance_matrix, cfg, graph_val=graph_val)

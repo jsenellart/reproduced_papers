@@ -22,25 +22,52 @@
     },
     "solver": {
         "method": "exhaustive",
-        "max_iter": 2000,
-        "temperature": 1.0,
-        "cooling": 0.995,
-        "restarts": 5
+        "configs": {
+            "exhaustive": {},
+            "annealing": {
+                "max_iter": 2000,
+                "temperature": 1.0,
+                "cooling": 0.995,
+                "restarts": 5
+            },
+            "obliq-static": {
+                "nsamples": 1000,
+                "time_steps": 1,
+                "backend": "CliffordClifford2017",
+                "use_remote": false,
+                "token": "",
+                "num_rep": 10,
+                "graph_val": 0,
+                "restarts": 3
+            },
+            "obliq": {
+                "nsamples": 1000,
+                "time_steps": 1,
+                "backend": "CliffordClifford2017",
+                "use_remote": false,
+                "token": "",
+                "num_rep": 10,
+                "graph_val": 0,
+                "restarts": 3,
+                "use_merlin": true
+            },
+            "vqc": {
+                "nsamples": 1000,
+                "time_steps": 1,
+                "backend": "CliffordClifford2017",
+                "use_remote": false,
+                "token": "",
+                "num_rep": 10,
+                "graph_val": 0,
+                "restarts": 5,
+                "use_merlin": true,
+                "steps": 200,
+                "lr": 0.05
+            }
+        }
     },
     "logging": {
         "level": "info",
         "save_config_snapshot": true
-    },
-    "quantum": {
-        "enabled": false,
-        "method": "obliq-static",
-        "nsamples": 1000,
-        "time_steps": 1,
-        "backend": "CliffordClifford2017",
-        "use_remote": false,
-        "token": "",
-        "num_rep": 10,
-        "graph_val": 0,
-        "restarts": 3
     }
 }

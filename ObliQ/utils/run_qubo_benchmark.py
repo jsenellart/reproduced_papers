@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import os
+import copy
+import json
 import pickle
 import sys
 import time
@@ -12,99 +13,148 @@ import networkx as nx
 import numpy as np
 import yaml
 
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-BENCH_DIR = PROJECT_DIR / "qubo-benchmark" / "benchmark"
-INST_DIR = PROJECT_DIR / "qubo-benchmark" / "instances"
-DEFAULT_RESULTS_DIR = PROJECT_DIR / "qubo-benchmark" / "results_obliq"
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_DIR = CURRENT_FILE.parents[1]
+REPO_ROOT = CURRENT_FILE.parents[2]
+for candidate in (PROJECT_DIR, REPO_ROOT):
+    candidate_str = str(candidate)
+    if candidate_str not in sys.path:
+        sys.path.insert(0, candidate_str)
 
-# Add benchmark code to path so we can reuse its loader without modifying it
-if str(BENCH_DIR) not in sys.path:
-    sys.path.insert(0, str(BENCH_DIR))
-
-from main import load_problem  # type: ignore  # noqa: E402
-
-from lib.qubo import QuboInstance, qubo_objective, solve_problem
+from lib.qubo import QuboInstance, solve_problem
 from lib.quantum import maybe_run_quantum
+from runtime_lib.cli import apply_cli_overrides, build_cli_parser
+from runtime_lib.config import load_config
+
+CLI_SCHEMA_PATH = PROJECT_DIR / "configs" / "cli.json"
+DEFAULTS_PATH = PROJECT_DIR / "configs" / "defaults.json"
+BENCH_DIR = PROJECT_DIR / "qubo-benchmark"
+DEFAULT_BENCHMARK_CONFIG = BENCH_DIR / "benchmark" / "config.yml"
+INST_DIR = BENCH_DIR / "instances"
+DEFAULT_RESULTS_DIR = BENCH_DIR / "results_obliq"
+QUANTUM_METHODS = {"obliq", "obliq-static", "vqc"}
+
+
+def _load_cli_schema() -> dict:
+    return json.loads(CLI_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+def _build_config_from_cli(args: argparse.Namespace, arg_defs: list[dict]) -> dict:
+    defaults = load_config(DEFAULTS_PATH)
+    cfg = copy.deepcopy(defaults)
+    cfg = apply_cli_overrides(cfg, args, arg_defs, PROJECT_DIR, Path.cwd())
+    if getattr(args, "seed", None) is not None:
+        cfg["seed"] = int(args.seed)
+    return cfg
+
+
+def _prepare_method_cfg(solver_cfg: dict, seed: int) -> tuple[str, dict]:
+    method = (solver_cfg.get("method") or "exhaustive").lower()
+    method_cfg = dict(solver_cfg.get("configs", {}).get(method, {}))
+    method_cfg.setdefault("seed", seed)
+    method_cfg["method"] = method
+    return method, method_cfg
+
+
+def _resolve_config_path(raw: str | Path) -> Path:
+    config_path = Path(raw)
+    if config_path.is_absolute():
+        return config_path
+
+    project_candidate = (PROJECT_DIR / config_path).resolve()
+    if project_candidate.exists():
+        return project_candidate
+
+    bench_candidate = (BENCH_DIR / config_path).resolve()
+    if bench_candidate.exists():
+        return bench_candidate
+
+    raise FileNotFoundError(f"Benchmark config not found: {config_path}")
+
+
+def _resolve_results_dir(raw: str | Path) -> Path:
+    results_path = Path(raw)
+    if results_path.is_absolute():
+        return results_path
+    return (PROJECT_DIR / results_path).resolve()
+
+
+def load_problem(path: str | Path) -> np.ndarray:
+    npz_path = Path(path)
+    with np.load(npz_path, allow_pickle=False) as data:
+        i = data["i"]
+        j = data["j"]
+        Jij = data["Jij"]
+    size = int(max(np.max(i), np.max(j)) + 1)
+    Q = np.zeros((size, size), dtype=float)
+    Q[i, j] = Jij
+    if np.any(Q != Q.T):
+        Q = Q + Q.T
+    return Q
 
 
 def collect_instances(instances: Iterable[str]) -> list[Path]:
     problems: list[Path] = []
     for entry in instances:
-        base = INST_DIR / entry
-        if base.suffix == ".npz":
-            problems.append(base)
+        entry_path = Path(entry)
+        if not entry_path.is_absolute():
+            entry_path = INST_DIR / entry_path
+        if entry_path.suffix == ".npz" and entry_path.is_file():
+            problems.append(entry_path)
             continue
-        if base.is_dir():
-            problems.extend(base.rglob("*.npz"))
+        if entry_path.is_dir():
+            problems.extend(sorted(entry_path.rglob("*.npz")))
+            continue
+        raise FileNotFoundError(f"Instance path not found: {entry_path}")
     return sorted(problems)
 
 
 def run_solver_on_problem(
     Q: np.ndarray,
     solver_cfg: dict,
-    quantum_cfg: dict,
     seed: int,
-    *,
-    graph_val: int = 0,
 ) -> tuple[np.ndarray, float, str]:
-    quantum_methods = {"obliq-static", "vqc"}
-    method = solver_cfg.get("method", "annealing").lower()
-
+    method, method_cfg = _prepare_method_cfg(solver_cfg, seed)
     instance = QuboInstance(matrix=Q, constant=0.0, description="benchmark")
 
-    if method in quantum_methods:
-        quantum_cfg = dict(quantum_cfg)
-        quantum_cfg["enabled"] = True
-        quantum_cfg["method"] = method
+    if method in QUANTUM_METHODS:
         q_res = maybe_run_quantum(
             instance.matrix,
-            quantum_cfg,
+            method_cfg,
             constant=instance.constant,
-            graph_val=graph_val,
+            graph_val=int(method_cfg.get("graph_val", 0)),
         )
-        assert q_res is not None
-        return np.array(q_res.solution), float(q_res.objective), f"obliq_{q_res.solver}"
+        return np.asarray(q_res.solution, dtype=int), float(q_res.objective), f"obliq_{q_res.solver}"
 
-    solution, value, method = solve_problem(instance, solver_cfg, seed=seed)
-
-    if quantum_cfg.get("enabled"):
-        q_res = maybe_run_quantum(
-            instance.matrix,
-            quantum_cfg,
-            constant=instance.constant,
-            graph_val=graph_val,
-        )
-        if q_res:
-            return np.array(q_res.solution), float(q_res.objective), f"obliq_{q_res.solver}"
-
-    return solution, float(value), f"obliq_{method}"
+    solution, value, solved_method = solve_problem(instance, method_cfg, seed=seed)
+    return np.asarray(solution, dtype=int), float(value), f"obliq_{solved_method}"
 
 
 def run_benchmark(
     instances: list[str],
     solver_cfg: dict,
-    quantum_cfg: dict,
     results_dir: Path,
     solver_label: str,
     seed: int,
 ) -> None:
     problems = collect_instances(instances)
-    results_dir.mkdir(parents=True, exist_ok=True)
+    if not problems:
+        raise ValueError("No benchmark instances found")
 
     for prob in problems:
-        Q = load_problem(str(prob))
+        Q = load_problem(prob)
         start = time.time()
         solution, loss, method = run_solver_on_problem(
             Q,
             solver_cfg,
-            quantum_cfg,
-            solver_label,
             seed,
-            graph_val=int(quantum_cfg.get("graph_val", 0)),
         )
         elapsed = time.time() - start
 
-        rel = prob.relative_to(INST_DIR).with_suffix("")
+        try:
+            rel = prob.relative_to(INST_DIR).with_suffix("")
+        except ValueError:
+            rel = prob.with_suffix("")
         res_path = results_dir / rel.parent
         res_path.mkdir(parents=True, exist_ok=True)
         res_file = res_path / f"{rel.name}_{solver_label}.pkl"
@@ -128,74 +178,87 @@ def run_benchmark(
         print(f"[obliq] {rel.name} -> {res_file} (loss={loss:.4f}, time={elapsed:.2f}s)")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run ObliQ solver on qubo-benchmark instances without modifying the benchmark.")
+def parse_args() -> tuple[argparse.Namespace, list[dict]]:
+    cli_schema = _load_cli_schema()
+    parser, arg_defs = build_cli_parser(cli_schema)
     parser.add_argument(
         "--config",
         type=str,
-        default=str(BENCH_DIR / "config.yml"),
-        help="Path to qubo-benchmark config.yml",
+        default=str(DEFAULT_BENCHMARK_CONFIG),
+        help="Path to benchmark config.yml",
     )
     parser.add_argument(
         "--results-dir",
         type=str,
         default=str(DEFAULT_RESULTS_DIR),
-        help="Where to store pickled results",
+        help="Directory for pickled benchmark results",
     )
     parser.add_argument(
-        "--solver",
-        type=str,
-        default="annealing",
-        choices=["exhaustive", "annealing", "obliq-static", "vqc"],
-        help="Solver backend from ObliQ (classical or photonic)",
+        "--seed",
+        type=int,
+        default=None,
+        help="Override random seed used for solver restarts",
     )
     parser.add_argument(
-        "--quantum",
+        "--merlin",
+        dest="enable_merlin",
         action="store_true",
-        help="(Optional) also run quantum ObliQ when classical solver is chosen",
+        help="Enable MerLin-based VQC acceleration",
     )
     parser.add_argument(
-        "--quantum-method",
-        type=str,
-        default="obliq-static",
-        choices=["obliq-static", "vqc"],
-        help="Quantum solver choice",
+        "--no-merlin",
+        dest="enable_merlin",
+        action="store_false",
+        help="Disable MerLin-based VQC acceleration",
     )
-    parser.add_argument("--seed", type=int, default=7, help="Random seed")
-    parser.add_argument("--anneal-iters", type=int, default=5000, help="Annealing iterations")
-    parser.add_argument("--anneal-restarts", type=int, default=5, help="Annealing restarts")
-    parser.add_argument("--quantum-restarts", type=int, default=3, help="Random restarts for VQC parameters")
-    parser.add_argument("--nsamples", type=int, default=1000, help="Number of photonic samples/shots")
-    return parser.parse_args()
+    parser.set_defaults(enable_merlin=True)
+    parser.add_argument(
+        "--photonic-restarts",
+        type=int,
+        default=None,
+        help="Override photonic solver restarts for all quantum methods",
+    )
+    args = parser.parse_args()
+    return args, arg_defs
 
 
 def main() -> None:
-    args = parse_args()
-    with open(args.config) as fh:
-        configs = yaml.safe_load(fh)  # type: ignore[name-defined]
+    args, arg_defs = parse_args()
+    benchmark_cfg_path = _resolve_config_path(args.config)
 
-    solver_cfg = {
-        "method": args.solver,
-        "max_iter": args.anneal_iters,
-        "restarts": args.anneal_restarts,
-    }
+    with benchmark_cfg_path.open("r", encoding="utf-8") as fh:
+        benchmark_cfg = yaml.safe_load(fh) or {}
 
-    quantum_cfg = {
-        "enabled": args.quantum or args.solver in {"obliq-static", "vqc"},
-        "method": args.quantum_method,
-        "restarts": args.quantum_restarts,
-        "nsamples": args.nsamples,
-        "seed": args.seed,
-    }
+    project_cfg = _build_config_from_cli(args, arg_defs)
+    solver_cfg = project_cfg.get("solver", {})
+    method = solver_cfg.get("method", "exhaustive")
+    solver_label = f"obliq_{method}"
 
-    solver_label = f"obliq_{args.solver}"
+    if args.photonic_restarts is not None:
+        for key in ("obliq-static", "obliq", "vqc"):
+            cfg = solver_cfg.get("configs", {}).get(key)
+            if isinstance(cfg, dict):
+                cfg["restarts"] = args.photonic_restarts
+
+    for key in ("obliq", "vqc"):
+        cfg = solver_cfg.get("configs", {}).get(key)
+        if isinstance(cfg, dict):
+            cfg["use_merlin"] = bool(args.enable_merlin)
+
+    seed = int(project_cfg.get("seed", args.seed or 0))
+    results_dir = _resolve_results_dir(args.results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    instances = benchmark_cfg.get("instances", [])
+    if not isinstance(instances, list):
+        raise ValueError("Benchmark config must define an 'instances' list")
+
     run_benchmark(
-        instances=configs.get("instances", []),
+        instances=instances,
         solver_cfg=solver_cfg,
-        quantum_cfg=quantum_cfg,
-        results_dir=Path(args.results_dir),
+        results_dir=results_dir,
         solver_label=solver_label,
-        seed=args.seed,
+        seed=seed,
     )
 
 

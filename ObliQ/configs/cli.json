@@ -44,60 +44,74 @@
       "apply": {"kind": "config_path", "path": "solver.method"}
     },
     {
-      "flags": ["--solver.max-iter"],
+      "flags": ["--solver.annealing.max-iter"],
       "help": "Iterations for annealing",
       "type": "int",
       "default": null,
-      "apply": {"kind": "config_path", "path": "solver.max_iter"}
+      "apply": {"kind": "config_path", "path": "solver.configs.annealing.max_iter"}
     },
     {
-      "flags": ["--solver.restarts"],
+      "flags": ["--solver.annealing.restarts"],
       "help": "Number of annealing restarts",
       "type": "int",
       "default": null,
-      "apply": {"kind": "config_path", "path": "solver.restarts"}
+      "apply": {"kind": "config_path", "path": "solver.configs.annealing.restarts"}
     },
     {
-      "flags": ["--solver.temperature"],
+      "flags": ["--solver.annealing.temperature"],
       "help": "Initial temperature for annealing",
       "type": "float",
       "default": null,
-      "apply": {"kind": "config_path", "path": "solver.temperature"}
+      "apply": {"kind": "config_path", "path": "solver.configs.annealing.temperature"}
     },
     {
-      "flags": ["--solver.cooling"],
+      "flags": ["--solver.annealing.cooling"],
       "help": "Cooling rate for annealing",
       "type": "float",
       "default": null,
-      "apply": {"kind": "config_path", "path": "solver.cooling"}
+      "apply": {"kind": "config_path", "path": "solver.configs.annealing.cooling"}
     },
     {
-      "flags": ["--quantum.enabled"],
-      "help": "Toggle quantum photonic solver (requires perceval)",
-      "type": "bool",
-      "default": null,
-      "apply": {"kind": "config_path", "path": "quantum.enabled"}
-    },
-    {
-      "flags": ["--quantum.method"],
-      "help": "Quantum solver: obliq-static or vqc",
-      "type": "str",
-      "default": null,
-      "apply": {"kind": "config_path", "path": "quantum.method"}
-    },
-    {
-      "flags": ["--quantum.nsamples"],
-      "help": "Number of photonic samples/shots",
+      "flags": ["--solver.obliq-static.nsamples"],
+      "help": "Photonic samples/shots for obliq-static",
       "type": "int",
       "default": null,
-      "apply": {"kind": "config_path", "path": "quantum.nsamples"}
+      "apply": {"kind": "config_path", "path": "solver.configs.obliq-static.nsamples"}
     },
     {
-      "flags": ["--quantum.restarts"],
-      "help": "Random restarts for VQC parameter search",
+      "flags": ["--solver.obliq-static.restarts"],
+      "help": "Random restarts for obliq-static parameter sweeps",
       "type": "int",
       "default": null,
-      "apply": {"kind": "config_path", "path": "quantum.restarts"}
+      "apply": {"kind": "config_path", "path": "solver.configs.obliq-static.restarts"}
+    },
+    {
+      "flags": ["--solver.obliq.nsamples"],
+      "help": "Photonic samples/shots for hybrid ObliQ",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.configs.obliq.nsamples"}
+    },
+    {
+      "flags": ["--solver.obliq.restarts"],
+      "help": "Random restarts for hybrid ObliQ VQC refinement",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.configs.obliq.restarts"}
+    },
+    {
+      "flags": ["--solver.vqc.nsamples"],
+      "help": "Photonic samples/shots for standalone VQC",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.configs.vqc.nsamples"}
+    },
+    {
+      "flags": ["--solver.vqc.restarts"],
+      "help": "Random restarts for standalone VQC",
+      "type": "int",
+      "default": null,
+      "apply": {"kind": "config_path", "path": "solver.configs.vqc.restarts"}
     }
   ]
 }

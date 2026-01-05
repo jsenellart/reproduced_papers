@@ -3,7 +3,7 @@
   "problem": {
     "type": "maxcut",
     "graph": {
-      "num_nodes": 6,
+      "num_nodes": 8,
       "edge_prob": 0.4
     }
   },

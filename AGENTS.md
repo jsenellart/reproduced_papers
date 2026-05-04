@@ -186,18 +186,14 @@ Use these sections unless the paper has a stronger existing structure:
 
 ## Reference and Attribution
 ## Original Paper
-## Reproduction Scope
-## Updates and Deviations
-## Project Layout
-## Install
-## How to Run
+## Reproduction Scope (incuding Updates and Deviations)
+## Project Layout (optional as it is fixed by the template)
+## Install and How to Run
 ## Configuration
-## Data
-## Outputs
-## Results Obtained
-## Comparison with the Paper
+## Data (optional if the dataset is well-known)
+## Results Obtained and Comparison with the Paper
 ## Limitations
-## Tests
+## Tests (optional description)
 ## Citation and License
 ```
 

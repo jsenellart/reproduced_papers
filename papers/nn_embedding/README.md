@@ -145,7 +145,7 @@ The MerLin implementation is similar to the gate based one. Here is the main imp
 - In the constructor:
     - A ``_SimilarityLayer`` module is constructed which is an implementation of the model used in the first phase of the NQE pipeline. It creates a kernel-like quantum layer that executes the $U(w(x))(U(w(x')))^\dagger$ unitary where w is the classical model and x and x' are the points that we want to compare.
     - A ``_TrainingModule`` module that uses the ``_SimilarityLayer`` to create a trainable model with the classical model parameters as the trainable ones and returns the overlap between the two encoded inputs.
-    - A ``_TrainedEmbeddingModel`` module that is used to train the quantum lassifier by only having its parameters as the trainable ones.
+    - A ``_TrainedEmbeddingModel`` module that is used to train the quantum classifier by only having its parameters as the trainable ones.
 - Then the ``train_embedding`` and ``train_classifier`` can be used to complete the two phases of the NQE pipeline easily. The user needs to use those methods for training and can acess the full interconnected models with the ``NeuralEmbeddingMerLinModel.model`` attribute.
 
 

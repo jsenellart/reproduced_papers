@@ -1,6 +1,6 @@
 {
     "description": "Run the FIG2 experiment",
-    "outdir": "results",
+    "outdir": "outdir",
     "exp_to_run": "FIG2",
     "dataset": "mnist",
     "use_merlin": "False",

@@ -148,6 +148,46 @@ if __name__ == "__main__":
         ),
     )
 
+    # --- quantum generator options (photonic + qubit) ---
+    ph_group = parser.add_argument_group("Quantum generator options (photonic + qubit)")
+    ph_group.add_argument(
+        "--observable",
+        choices=["parity", "majority", "bunching", "single_output"],
+        default="parity",
+        help=(
+            "Photonic teacher observable (photonic_quantum generator only). "
+            "'parity': (-1)^{n_left}. "
+            "'majority': sign(n_left - n_right). Requires even m. "
+            "'bunching': P(anti-bunched) - P(bunched). "
+            "'single_output': P(output=input_state) - P(output=reversed_input_state). "
+            "Default: parity."
+        ),
+    )
+    ph_group.add_argument(
+        "--nshots",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Number of measurement shots for quantum generators. "
+            "0 (default) = exact computation (analytical probabilities / exact parity expectation). "
+            ">0 = finite-shot simulation: photonic uses Merlin's shot sampler; "
+            "qubit adds Gaussian noise with std=sqrt((1−E²)/N) to the exact expectation."
+        ),
+    )
+    ph_group.add_argument(
+        "--n-features",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Number of data-encoded features (photonic_quantum generator/learner only). "
+            "Decouples the input dimension from the circuit size m: n_features modes "
+            "receive phase encoding while the full m-mode Fock space is used for "
+            "measurement. Default: m-1 (all modes except the last)."
+        ),
+    )
+
     # --- quantum-specific ---
     q_group = parser.add_argument_group("Quantum learner options")
     q_group.add_argument(
@@ -213,6 +253,14 @@ if __name__ == "__main__":
 
     cli = parser.parse_args()
 
+    # Validate n_features vs m
+    if cli.n_features is not None and cli.n_features > cli.m - 1:
+        parser.error(
+            f"--n-features {cli.n_features} must be ≤ m-1 = {cli.m - 1}. "
+            f"Only the first n_features modes receive phase encoding; "
+            f"the last mode is unencoded to remove global-phase redundancy."
+        )
+
     # Resolve default LR per learner
     lr = cli.lr if cli.lr is not None else (3e-3 if cli.learner == "mlp" else 1e-2)
 
@@ -241,7 +289,8 @@ if __name__ == "__main__":
                              balanced=cli.balanced, loss=cli.loss,
                              min_margin=cli.min_margin,
                              bail_threshold=cli.bail_threshold,
-                             max_resample_iter=cli.max_resample_iter)
+                             max_resample_iter=cli.max_resample_iter,
+                             nsample=cli.nshots)
     else:
         find_min_depth(**common, depths=cli.depths, m_circuits=cli.sizes,
                        optimizer_name=cli.optimizer,
@@ -249,4 +298,7 @@ if __name__ == "__main__":
                        min_margin=cli.min_margin,
                        bail_threshold=cli.bail_threshold,
                        max_resample_iter=cli.max_resample_iter,
-                       early_stopping_patience=cli.early_stopping_patience)
+                       early_stopping_patience=cli.early_stopping_patience,
+                       observable=cli.observable,
+                       n_features=cli.n_features,
+                       nsample=cli.nshots)

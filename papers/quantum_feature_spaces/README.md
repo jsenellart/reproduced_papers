@@ -244,9 +244,7 @@ Additional options: `--alpha`, `--marker-size`, `--save path.png`, `--no-show`.
 - **`mse` loss (soft regression) is much stronger than `hloss`** when the
   generator provides continuous parity targets. At m=6, depth=1:
   `mse` reaches 100% while `hloss` plateaus at ~73%.
-- **`min_margin` is critical for photonic data.** Without filtering,
+- **`min_margin` is critical for photonic data (and probably others).** Without filtering,
   ~63% of samples lie near the decision boundary and dominate the loss
   with near-zero gradient signal. Setting `min_margin=0.10` (≈1.4σ)
   makes the problem cleanly learnable at depth=1.
-- **The photonic RECTANGLE topology is universal** for the teacher
-  (validated analytically by `CircuitOptimizer` fidelity ≥ 0.999).

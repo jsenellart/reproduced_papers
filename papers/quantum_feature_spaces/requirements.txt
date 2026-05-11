@@ -1,0 +1,11 @@
+# Core quantum / photonic stack
+merlinquantum>=0.1.0
+perceval-quandela>=0.13.1
+
+# ML / numerics
+torch>=2.0.0
+numpy>=2.2.0
+scikit-learn>=1.7.0
+
+# Visualisation
+matplotlib>=3.7.0

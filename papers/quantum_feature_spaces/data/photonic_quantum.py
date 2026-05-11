@@ -3,17 +3,43 @@
 Teacher circuit::
 
     W1 (Haar) → phase encode(x) → W2 (Haar) → photon-number measurement
-    label = parity of photon counts on `parity_modes`
+
+The number of encoded features ``n_features`` is independent of ``m``:
+only the first ``n_features`` modes receive a data-dependent phase shift
+(the remaining modes are unencoded).  This lets you use a larger Fock space
+(more modes/photons for expressivity) while keeping the input space low-
+dimensional for visualisation.  Default: ``n_features = m − 1``.
+
+Four observables are supported (``observable`` argument):
+
+``"parity"`` (default)
+    soft = Σ_s P(s) · (−1)^{n_parity(s)},  label = sign.
+    n_parity = photon count on first ⌈m/2⌉ modes.
+
+``"majority"``
+    soft = E[(n_left − n_right) / k],  label = sign.
+    n_left = photons in first m//2 modes, n_right = photons in last m//2 modes.
+    Requires even m.  Ties (soft = 0) filtered by ``min_margin > 0``.
+
+``"bunching"``
+    soft = P(anti-bunched) − P(bunched),  label = sign.
+    Anti-bunched = all photons in distinct modes (max count ≤ 1).
+    Related to Hong-Ou-Mandel interference and the boson-sampling permanent.
+
+``"single_output"``
+    soft = P(output = input_state) − P(output = reversed_input_state),  label = sign.
+    Probes the probability of two specific Fock states: the injected input state
+    and its mode-reversal.  Each probability is |perm(submatrix of U(x))|² —
+    an interference term that can oscillate at high spatial frequency with x.
+    The difference is naturally centred near 0, giving balanced classes.
 
 This module provides:
 
-- :func:`generate_photonic_quantum`  : the public entry point that returns a
-  :class:`data.base.Dataset` and is registered in
+- :func:`generate_photonic_quantum`  : public entry point registered in
   :data:`data.GENERATORS`.
-- helper builders (:func:`build_sandwich_experiment`,
-  :func:`make_quantum_layer`) and the parity-from-Fock-key utility
-  :func:`parity_of_key`, used by the training code in
-  :mod:`train_quantum`.
+- circuit builders :func:`build_sandwich_experiment`, :func:`make_quantum_layer`.
+- observable utilities :func:`parity_of_key`, :func:`majority_score_of_key`,
+  :func:`bunching_score_of_key`, :func:`single_output_score_of_key`.
 """
 
 from __future__ import annotations
@@ -35,30 +61,34 @@ from ._resample import filter_resample
 
 def build_sandwich_experiment(
     m: int,
+    n_features: int | None = None,
     phase_prefix: str = "x",
 ) -> tuple[pcvl.Experiment, "np.ndarray", "np.ndarray"]:
     """Build the W1 → P(x) → W2 circuit.
 
-    P(x) = ``diag(exp(i x_0), ..., exp(i x_{m-2}), 1)`` — the final mode
-    receives no phase, removing the global phase redundancy.
+    Only the first ``n_features`` modes receive a data-dependent phase shift.
+    Default ``n_features = m − 1`` (all modes except the last, which removes
+    the global-phase redundancy).
 
     Returns
     -------
     experiment : pcvl.Experiment
-    W1 : np.ndarray  shape (m, m) complex  – first Haar random unitary
-    W2 : np.ndarray  shape (m, m) complex  – second Haar random unitary
+    W1 : np.ndarray  shape (m, m) complex
+    W2 : np.ndarray  shape (m, m) complex
     """
+    if n_features is None:
+        n_features = m - 1
+    if not (1 <= n_features <= m - 1):
+        raise ValueError(f"n_features must be in [1, m−1], got {n_features} for m={m}.")
+
     circuit = pcvl.Circuit(m, name="haar_phase_haar")
 
-    # Fixed Haar block W1
     _W1 = pcvl.Matrix.random_unitary(m)
     circuit.add(0, pcvl.Unitary(_W1), merge=True)
 
-    # Input-dependent phase column
-    for i in range(m - 1):
+    for i in range(n_features):
         circuit.add(i, pcvl.PS(pcvl.P(f"{phase_prefix}{i}")))
 
-    # Fixed Haar block W2
     _W2 = pcvl.Matrix.random_unitary(m)
     circuit.add(0, pcvl.Unitary(_W2), merge=True)
 
@@ -66,10 +96,20 @@ def build_sandwich_experiment(
 
 
 def default_input_state(m: int, k: int) -> list[int]:
-    """Inject one photon in each of the first k modes."""
+    """Inject k photons evenly spaced across m modes.
+
+    Photon i lands on mode round(i * m / k), spreading input across the full
+    interferometer so no region is out of the light cone.
+
+    Examples
+    --------
+    m=4, k=2  →  [1, 0, 1, 0]
+    m=6, k=2  →  [1, 0, 0, 1, 0, 0]
+    m=6, k=3  →  [1, 0, 1, 0, 1, 0]
+    """
     state = [0] * m
     for i in range(k):
-        state[i] = 1
+        state[round(i * m / k)] = 1
     return state
 
 
@@ -79,25 +119,71 @@ def parity_of_key(key, parity_modes: Iterable[int]) -> int:
     return +1 if n % 2 == 0 else -1
 
 
+def majority_score_of_key(key, m: int, k: int) -> float:
+    """Return (n_left − n_right) / k for the majority observable.
+
+    n_left  = photons in modes 0 .. m//2 − 1
+    n_right = photons in modes m//2 .. m − 1
+    Result ∈ [−1, +1]; 0 means tie (only possible when k is even).
+    Requires even m so the two halves are the same size.
+    """
+    split = m // 2
+    n_left  = sum(int(key[i]) for i in range(split))
+    n_right = sum(int(key[i]) for i in range(split, m))
+    return (n_left - n_right) / k
+
+
+def bunching_score_of_key(key) -> int:
+    """Return +1 if anti-bunched (all photons in distinct modes), −1 if bunched.
+
+    Anti-bunched ⟺ no mode has more than one photon (max count ≤ 1).
+    This is the observable related to Hong-Ou-Mandel interference: the
+    probability of anti-bunching is given by the permanent of a submatrix
+    of the unitary, making it classically hard to compute for large circuits.
+    """
+    return +1 if max(int(n) for n in key) <= 1 else -1
+
+
+def single_output_score_of_key(key, input_state: list[int]) -> int:
+    """Return +1 if key matches input_state, −1 if it matches reversed input_state, else 0.
+
+    Designed for the ``"single_output"`` observable:
+        soft = P(output = input_state) − P(output = reversed_input_state)
+    Only two Fock states carry non-zero weight; all others contribute 0.
+    Each probability is |perm(submatrix of U(x))|², which can oscillate at
+    high spatial frequency — potentially producing finer decision boundaries
+    than the aggregate parity/majority/bunching observables.
+    """
+    key_list = [int(key[i]) for i in range(len(input_state))]
+    if key_list == list(input_state):
+        return +1
+    if key_list == list(reversed(input_state)):
+        return -1
+    return 0
+
+
 def make_quantum_layer(
     m: int,
     k: int,
+    n_features: int | None = None,
     seed: int = 1234,
     input_state: list[int] | None = None,
     phase_prefix: str = "x",
     return_object: bool = False,
 ) -> tuple[ML.QuantumLayer, dict]:
     """Build the merlin QuantumLayer + a metadata dict (also stores W1, W2)."""
+    if n_features is None:
+        n_features = m - 1
+
     experiment, W1, W2 = build_sandwich_experiment(
-        m=m,
-        phase_prefix=phase_prefix,
+        m=m, n_features=n_features, phase_prefix=phase_prefix,
     )
 
     if input_state is None:
-        input_state = [1] * k + [0] * (m - k)
+        input_state = default_input_state(m, k)
 
     layer = ML.QuantumLayer(
-        input_size=m - 1,
+        input_size=n_features,
         experiment=experiment,
         input_state=input_state,
         input_parameters=[phase_prefix],
@@ -108,11 +194,12 @@ def make_quantum_layer(
     return layer, {
         "m": m,
         "k": k,
+        "n_features": n_features,
         "seed": seed,
         "input_state": input_state,
         "phase_prefix": phase_prefix,
-        "teacher_W1": W1,   # (m, m) complex numpy array — exact teacher unitary
-        "teacher_W2": W2,   # (m, m) complex numpy array — exact teacher unitary
+        "teacher_W1": W1,
+        "teacher_W2": W2,
     }
 
 
@@ -125,8 +212,10 @@ def generate_photonic_quantum(
     size: int,
     m: int,
     k: int,
+    n_features: int | None = None,
     seed: int = 1234,
     nsample: int = 0,
+    observable: str = "parity",
     parity_modes: Iterable[int] | None = None,
     balanced: bool = False,
     min_margin: float = 0.0,
@@ -136,7 +225,7 @@ def generate_photonic_quantum(
     dtype: torch.dtype = torch.float32,
     **_,
 ) -> Dataset:
-    """Quantum parity dataset from a Merlin sandwich circuit.
+    """Photonic sandwich dataset from a Merlin circuit.
 
     Parameters
     ----------
@@ -146,68 +235,99 @@ def generate_photonic_quantum(
         Number of optical modes.
     k : int
         Number of injected photons (1 ≤ k ≤ m).
+    n_features : int, optional
+        Number of data-encoded phases (input dimension).
+        Default: m − 1 (all modes except the last).
+        Setting n_features < m − 1 decouples the input dimension from the
+        circuit size, e.g. n_features=2 with m=4 gives a 2D feature space
+        backed by a richer 4-mode Fock space.
     seed : int
         RNG seed for the Haar matrices and dataset draws.
     nsample : int
-        0 ⇒ exact probabilities returned by the simulator (default).
-        >0 ⇒ sample ``nsample`` shots; the layer returns empirical probabilities.
+        0 ⇒ exact probabilities (default). >0 ⇒ empirical shot probabilities.
+    observable : {"parity", "majority", "bunching"}
+        ``"parity"``   soft = Σ_s P(s)·(−1)^{n_parity(s)}.
+        ``"majority"`` soft = E[(n_left − n_right)/k].  Requires even m.
+        ``"bunching"`` soft = P(anti-bunched) − P(bunched).
     parity_modes : iterable of int, optional
-        Modes used for parity. Default: first ``ceil(m/2)`` modes. Do not use
-        all modes — the total parity is fixed by ``k``.
+        Modes counted for ``observable="parity"``.
+        Default: first ⌈m/2⌉ modes.
     balanced : bool
-        If True, return ``size // 2`` rows per class.
+        If True, return size//2 rows per class.
     min_margin : float
-        Drop samples with ``|parity_expectation| < min_margin``. Mimics the
-        Havlíček et al. (2019) separation gap.
+        Drop samples with |soft| < min_margin.
     bail_threshold : float
-        If the post-balance yield from the first batch is below this fraction,
-        return a short dataset rather than iteratively resampling. Default
-        0.30. Set to 0 to disable the bail-out and always iterate to ``size``
-        (potentially expensive).
+        Abort resampling if first-batch yield is below this fraction.
     max_iter : int
-        Maximum resample iterations after the first batch. Default 10.
+        Maximum resample iterations.
     device, dtype
         Tensor placement / precision.
 
     Returns
     -------
     Dataset
-        ``X`` ``(N, m-1)`` features in [0, 2π], ``y`` ``(N,)`` binary labels,
-        ``soft_targets`` ``(N, 1)`` continuous parity expectation in [-1, +1],
-        ``metadata`` includes the teacher unitaries W1/W2 (used for sanity
-        checking by ``train_quantum.validate_teacher_params``).
+        X (N, n_features) in [0, 2π], y (N,) binary labels,
+        soft_targets (N, 1) in [−1, +1], metadata with W1/W2.
     """
     if not (1 <= k <= m):
         raise ValueError("Require 1 <= k <= m.")
     if nsample < 0:
         raise ValueError("nsample must be >= 0.")
+    if observable not in ("parity", "majority", "bunching", "single_output"):
+        raise ValueError(
+            f"observable must be 'parity', 'majority', 'bunching', or 'single_output', "
+            f"got {observable!r}."
+        )
+    if observable == "majority" and m % 2 != 0:
+        raise ValueError("observable='majority' requires even m.")
 
-    if parity_modes is None:
-        parity_modes = tuple(range((m + 1) // 2))
-    else:
-        parity_modes = tuple(parity_modes)
+    if n_features is None:
+        n_features = m - 1
 
     torch.manual_seed(seed)
     pcvl.random_seed(seed)
 
-    layer, metadata = make_quantum_layer(m=m, k=k, seed=seed)
+    layer, metadata = make_quantum_layer(m=m, k=k, n_features=n_features, seed=seed)
     layer = layer.to(device)
     output_keys = list(layer.output_keys)
-    parity_vec = torch.tensor(
-        [parity_of_key(key, parity_modes) for key in output_keys],
-        dtype=dtype,
-        device=device,
-    )
+
+    if observable == "parity":
+        if parity_modes is None:
+            parity_modes = tuple(range((m + 1) // 2))
+        else:
+            parity_modes = tuple(parity_modes)
+        score_vec = torch.tensor(
+            [parity_of_key(key, parity_modes) for key in output_keys],
+            dtype=dtype, device=device,
+        )
+    elif observable == "majority":
+        parity_modes = None
+        score_vec = torch.tensor(
+            [majority_score_of_key(key, m=m, k=k) for key in output_keys],
+            dtype=dtype, device=device,
+        )
+    elif observable == "bunching":
+        parity_modes = None
+        score_vec = torch.tensor(
+            [bunching_score_of_key(key) for key in output_keys],
+            dtype=dtype, device=device,
+        )
+    else:  # single_output
+        parity_modes = None
+        in_state = metadata["input_state"]
+        score_vec = torch.tensor(
+            [single_output_score_of_key(key, in_state) for key in output_keys],
+            dtype=dtype, device=device,
+        )
 
     def _draw(n: int):
-        Xb = 2.0 * np.pi * torch.rand(n, m - 1, dtype=dtype, device=device)
+        Xb = 2.0 * np.pi * torch.rand(n, n_features, dtype=dtype, device=device)
         probs = layer.forward(Xb, shots=nsample if nsample > 0 else None)
-        parity = probs @ parity_vec
-        yb = (parity >= 0).to(torch.long)
-        confidence = parity.abs()
-        return Xb, yb, parity, confidence
+        score = probs @ score_vec
+        yb = (score >= 0).to(torch.long)
+        return Xb, yb, score, score.abs()
 
-    (X, y, parity_expectation), info = filter_resample(
+    (X, y, soft), info = filter_resample(
         target_size=size,
         balanced=balanced,
         min_margin=min_margin,
@@ -226,24 +346,26 @@ def generate_photonic_quantum(
             f"iters={info['n_iters']})."
         )
 
-    metadata.update(
-        {
-            "generator": "quantum",
-            "nsample": nsample,
-            "parity_modes": tuple(parity_modes),
-            "balanced": balanced,
-            "min_margin": min_margin,
-            "total_raw_drawn": info["total_raw_drawn"],
-            "class_1_fraction": (
-                round(y.float().mean().item(), 4) if len(y) > 0 else float("nan")
-            ),
-        }
-    )
+    metadata.update({
+        "generator": "photonic_quantum",
+        "observable": observable,
+        "n_features": n_features,
+        "nsample": nsample,
+        "parity_modes": parity_modes,
+        "single_output_state_a": metadata["input_state"] if observable == "single_output" else None,
+        "single_output_state_b": list(reversed(metadata["input_state"])) if observable == "single_output" else None,
+        "balanced": balanced,
+        "min_margin": min_margin,
+        "total_raw_drawn": info["total_raw_drawn"],
+        "class_1_fraction": (
+            round(y.float().mean().item(), 4) if len(y) > 0 else float("nan")
+        ),
+    })
 
     return Dataset(
         X=X.cpu(),
         y=y.cpu(),
-        soft_targets=parity_expectation.cpu().unsqueeze(-1),
+        soft_targets=soft.cpu().unsqueeze(-1),
         metadata=metadata,
     )
 

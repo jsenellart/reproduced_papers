@@ -332,6 +332,7 @@ def find_min_qubit_depth(
     bail_threshold: float = 0.30,
     max_resample_iter: int = 10,
     loss: str = "hloss",
+    nsample: int = 0,
 ) -> None:
     """Find the minimum variational depth reaching the target accuracy.
 
@@ -342,15 +343,17 @@ def find_min_qubit_depth(
     if generator not in GENERATORS:
         raise ValueError(f"Unknown generator {generator!r}.")
 
-    margin_str = f"  min_margin={min_margin}" if min_margin > 0 else ""
+    margin_str  = f"  min_margin={min_margin}" if min_margin > 0 else ""
+    nshots_str  = f"  nsample={nsample}" if nsample > 0 else ""
     print(
         f"Generating dataset  generator={generator}  m={m}  k={k}  "
-        f"size={dataset_size}  balanced={balanced}{margin_str} ..."
+        f"size={dataset_size}  balanced={balanced}{margin_str}{nshots_str} ..."
     )
     ds = GENERATORS[generator](
         size=dataset_size, m=m, k=k, seed=data_seed,
         balanced=balanced, min_margin=min_margin,
         bail_threshold=bail_threshold, max_iter=max_resample_iter,
+        nsample=nsample,
     )
 
     if loss == "mse" and ds.soft_targets is None:

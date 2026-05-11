@@ -241,6 +241,7 @@ def generate_qubit_quantum(
     m: int,
     k: int = 4,
     seed: int = 1234,
+    nsample: int = 0,
     balanced: bool = False,
     min_margin: float = 0.0,
     bail_threshold: float = 0.30,
@@ -262,6 +263,12 @@ def generate_qubit_quantum(
         ``W_teacher(θ)``.  Default 4 — the deepest setting in the paper.
     seed : int
         RNG seed for the random teacher and for the dataset draws.
+    nsample : int
+        0 (default) ⇒ exact parity expectation.  >0 ⇒ simulate finite-shot
+        measurement noise: the estimated mean of nsample ±1 Pauli measurements
+        has std = sqrt((1 − E²) / nsample) by the CLT, so Gaussian noise with
+        that std is added to the exact expectation and the result is clamped to
+        [−1, +1].  Labels and margin filter are applied to the noisy value.
     balanced : bool
         If True, return ``size // 2`` rows per class.
     min_margin : float
@@ -293,13 +300,18 @@ def generate_qubit_quantum(
     n_params = n_variational_params(n_qubits, n_layers=k)
     theta_teacher = 2 * torch.pi * torch.rand(n_params, dtype=dtype)
 
-    data_rng = torch.Generator().manual_seed(seed + 1)
+    data_rng  = torch.Generator().manual_seed(seed + 1)
+    noise_rng = torch.Generator().manual_seed(seed + 13)
 
     def _draw(n: int):
         Xb = 2 * torch.pi * torch.rand(n, n_qubits, generator=data_rng, dtype=dtype)
         psi = feature_map_state(Xb, n_qubits, H_matrix, signs, pair_mask)
         psi = variational_apply(psi, theta_teacher, n_qubits)
-        parity = parity_expectation(psi, n_qubits)  # (n,) real
+        parity = parity_expectation(psi, n_qubits)  # (n,) real, exact
+        if nsample > 0:
+            # CLT: std of sample mean = sqrt((1 − E²) / nsample)
+            noise_std = ((1.0 - parity ** 2) / nsample).clamp(min=0.0).sqrt()
+            parity = (parity + torch.randn(n, generator=noise_rng, dtype=dtype) * noise_std).clamp(-1.0, 1.0)
         yb = (parity >= 0).long()
         confidence = parity.abs()
         return Xb, yb, parity, confidence
@@ -333,6 +345,7 @@ def generate_qubit_quantum(
             "n_qubits": n_qubits,
             "k": k,
             "seed": seed,
+            "nsample": nsample,
             "balanced": balanced,
             "min_margin": min_margin,
             "class_1_fraction": (

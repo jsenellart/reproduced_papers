@@ -74,10 +74,11 @@ source venv/bin/activate
 ## Project layout
 
 ```
-work/
-├── train.py                   # unified training CLI
-├── benchmark_6.py             # full grid benchmark (m=8, k=4)
-├── plot_dataset_projections.py # dataset visualisation
+papers/quantum_feature_spaces/
+├── train.py                       # unified training CLI
+├── benchmark_6.py                 # full grid benchmark (m=8, k=4)
+├── plot_data_generation.py        # unified dataset visualiser (n_features drives mode)
+├── plot_photonic_observables.py   # photonic-only observable comparison across (m,k) configs
 ├── data/
 │   ├── photonic_quantum.py    # Haar-unitary photonic teacher
 │   ├── qubit_quantum.py       # IQP feature-map qubit teacher
@@ -98,30 +99,36 @@ work/
 
 ```bash
 # Photonic learner on photonic-generated data, m=6, k=3
-python work/train.py \
+python papers/quantum_feature_spaces/train.py \
   --learner photonic_quantum --generator photonic_quantum \
   --m 6 --k 3 --balanced --min-margin 0.10 \
   --depths 1 2 3 --sizes 6 8 10 \
   --loss hloss --epochs 300
 
 # Classical MLP learner on quantum data
-python work/train.py \
+python papers/quantum_feature_spaces/train.py \
   --learner mlp --generator photonic_quantum \
   --m 6 --k 3 --balanced --min-margin 0.10 \
   --hidden-sizes 64 "64,64" "128,128"
 
 # Qubit learner on qubit-generated data (paper setting)
-python work/train.py \
+python papers/quantum_feature_spaces/train.py \
   --learner qubit_quantum --generator qubit_quantum \
   --m 6 --k 3 --balanced --min-margin 0.30 \
   --depths 1 2 3 4
+
+# Photonic learner with majority observable, 2 features on a 6-mode circuit
+python papers/quantum_feature_spaces/train.py \
+  --learner photonic_quantum --generator photonic_quantum \
+  --m 6 --k 3 --n-features 2 --observable majority \
+  --balanced --min-margin 0.10 --depths 1 2 3
 ```
 
 ### Full grid benchmark
 
 ```bash
-python work/benchmark_6.py             # runs all 12 cells in parallel
-python work/benchmark_6.py --dry-run   # preview commands without running
+python papers/quantum_feature_spaces/benchmark_6.py             # runs all 12 cells in parallel
+python papers/quantum_feature_spaces/benchmark_6.py --dry-run   # preview commands without running
 ```
 
 Logs are saved to `/tmp/bench_<learner>_<generator>.log`.
@@ -131,16 +138,23 @@ Logs are saved to `/tmp/bench_<learner>_<generator>.log`.
 ## `train.py` — reference
 
 ```
-python work/train.py --learner LEARNER --generator GENERATOR [options]
+python papers/quantum_feature_spaces/train.py --learner LEARNER --generator GENERATOR [options]
 ```
 
 ### Problem definition
 
 | Argument | Default | Description |
 |---|---|---|
-| `--m` | 6 | Number of optical modes (dataset feature dimension = m−1) |
+| `--m` | 6 | Number of optical modes (photonic) / qubit count (qubit) |
 | `--k` | 3 | Complexity parameter (photons / teacher layers / Fourier freq.) |
 | `--target-accuracy` | 0.90 | Stop search when this test accuracy is reached |
+
+### Photonic generator / learner options
+
+| Argument | Default | Description |
+|---|---|---|
+| `--observable` | `parity` | Photonic teacher observable: `parity`, `majority`, `bunching` (see below) |
+| `--n-features` | `m-1` | Input feature dimension. Decouples encoding dim from circuit size. |
 
 ### Learner architecture
 
@@ -182,11 +196,39 @@ python work/train.py --learner LEARNER --generator GENERATOR [options]
 ### `photonic_quantum`
 
 Teacher: `W1 (Haar) → phase-encode(x) → W2 (Haar)` run on Merlin + Perceval.
-Labels: `sign(parity expectation)`.  Soft targets: parity expectation ∈ [−1, +1].
 
-The teacher reachability check (`validate_teacher_params`) verifies before
-training that the learner's RECTANGLE MZI topology can reproduce W1/W2 with
-fidelity ≥ 0.999 (via `CircuitOptimizer`).
+**Input state:** photons are distributed evenly across the interferometer via
+`round(i * m / k)` for i in range(k).  This ensures all modes are reachable
+(no "light-cone" gaps), e.g. m=6, k=3 → `[1,0,1,0,1,0]`.
+
+**`n_features` decoupling:** the feature dimension is independent of the circuit
+size.  Setting `n_features=2` with `m=6` encodes two phases on modes 0–1 while
+using the full 6-mode Fock space for the measurement — a 2D input backed by a
+richer quantum state.  Default: `n_features = m - 1`.
+
+**Observables** (controlled by `--observable` / `observable=` parameter):
+
+| Observable | Formula | Notes |
+|---|---|---|
+| `parity` (default) | soft = Σ_s P(s)·(−1)^{n_left(s)} | n_left = photons on first ⌈m/2⌉ modes |
+| `majority` | soft = E[(n_left − n_right)/k] | n_left/right = photons on first/last m/2 modes; **requires even m** |
+| `bunching` | soft = P(anti-bunched) − P(bunched) | anti-bunched ⟺ all photons in distinct modes (HOM interference) |
+| `single_output` | soft = P(output=input_state) − P(output=reversed_input_state) | each term is a permanent-squared; difference oscillates near 0 with ~98% natural balance |
+
+The first three observables aggregate over many Fock states (coarse functions of the distribution).
+`single_output` focuses on just two specific Fock states — the injected input state and its
+mode-reversal — whose probabilities are each an interference permanent that can oscillate at
+higher spatial frequency than the aggregate observables.  This may produce finer-grained decision
+boundaries, closer to what the qubit IQP feature map achieves via its quadratic cross-phase terms.
+
+Label = sign(soft). Soft targets ∈ [−1, +1].
+
+**Seed sensitivity:** Haar-random unitaries can cause class imbalance for certain
+(observable, m, k, seed) combinations (HOM suppression of one class, or the
+majority observable being systematically biased by one input state geometry).
+Seed=2 works reliably for the tested configs `(m,k) ∈ {(4,2),(6,2),(6,3)}` with
+all three observables.  Set `--data-seed 2` if you see near-zero yield after
+`--balanced`.
 
 Recommended `min_margin`: 0.05–0.10 for m=6 (the parity distribution is
 concentrated near zero; the Havlíček 0.3 gap requires ~4σ here).
@@ -217,21 +259,73 @@ Recommended `min_margin`: ≤ 0.05.
 
 ## Dataset visualisation
 
-```bash
-python work/plot_dataset_projections.py \
-  --generator photonic_quantum \
-  --size 1000 --m 6 --k 3 --seed 42 \
-  --balanced --min-margin 0.10 --bail-threshold 0 \
-  --projection pca         # or tsne, pairwise
+### Unified visualiser: `plot_data_generation.py`
+
+Shows all six generators/observables side by side.  Display mode is chosen
+automatically from `--n-features`:
+
+```
+n_features = 2  → direct 2D scatter (x₀ vs x₁)
+n_features = 3  → x₂-sliced: --n-slices rows, each showing x₀ vs x₁ for one x₂ bin
+n_features ≥ 4  → PCA projection to 2D
 ```
 
-| `--projection` | Description |
-|---|---|
-| `pca` *(default)* | PCA → 2D scatter, annotated with explained variance |
-| `tsne` | t-SNE → 2D scatter, reveals non-linear cluster structure |
-| `pairwise` | All pairs of axes plotted side-by-side (only informative for d ≤ 3) |
+Columns (fixed order): Photonic×parity | Photonic×majority | Photonic×bunching | Qubit | Analytical | MLP
 
-Additional options: `--alpha`, `--marker-size`, `--save path.png`, `--no-show`.
+**2D direct** (`n_features=2`, m=6, k=3, seed=2, balanced):
+
+![2D scatter — all generators/observables](img/observable_2d.png)
+
+**3D x₂-sliced** (`n_features=3`, m=6, k=3, seed=2, balanced, 3 slices):
+
+![3D sliced — all generators/observables](img/observable_3d_sliced.png)
+
+**PCA projection** (`n_features=5`, m=6, k=3, seed=2, balanced):
+
+![PCA 2D — all generators/observables](img/observable_pca.png)
+
+```bash
+# 2D direct (commands used to generate the figures above)
+python papers/quantum_feature_spaces/plot_data_generation.py \
+  --n-features 2 --k 3 --m 6 --seed 2 --size 1000 --balanced \
+  --save papers/quantum_feature_spaces/img/observable_2d.png --no-show
+
+# 3D sliced (3 x₂ bins, 500 pts/panel → 1500 total per generator)
+python papers/quantum_feature_spaces/plot_data_generation.py \
+  --n-features 3 --k 3 --m 6 --seed 2 --size 500 --balanced --n-slices 3 \
+  --save papers/quantum_feature_spaces/img/observable_3d_sliced.png --no-show
+
+# High-dimensional via PCA
+python papers/quantum_feature_spaces/plot_data_generation.py \
+  --n-features 5 --k 3 --m 6 --seed 2 --size 1000 --balanced \
+  --save papers/quantum_feature_spaces/img/observable_pca.png --no-show
+```
+
+Key options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--n-features N` | (required) | Input dimension; must be ≤ m-1; controls display mode |
+| `--k K` | 3 | Photons (photonic) / depth-complexity (others) |
+| `--m M` | auto | Photonic circuit modes only (≥ n_features+1, preferably even) |
+| `--n-slices S` | 3 | x₂ bins for 3D mode |
+| `--size N` | 1000 | Target points per visual panel |
+| `--seed S` | 2 | RNG seed (seed=2 works well for all observables) |
+| `--save PATH` | — | Save figure to file |
+
+### Photonic observable comparison: `plot_photonic_observables.py`
+
+Compares parity / majority / bunching observables across multiple (m, k) configs.
+
+```bash
+# 2D direct, three (m,k) configurations
+python papers/quantum_feature_spaces/plot_photonic_observables.py --seed 2
+
+# 3D sliced for a single (m, k) config
+python papers/quantum_feature_spaces/plot_photonic_observables.py \
+    --n-features 3 --configs 6,3 --n-slices 3 --seed 2
+```
+
 
 ---
 
@@ -248,3 +342,7 @@ Additional options: `--alpha`, `--marker-size`, `--save path.png`, `--no-show`.
   ~63% of samples lie near the decision boundary and dominate the loss
   with near-zero gradient signal. Setting `min_margin=0.10` (≈1.4σ)
   makes the problem cleanly learnable at depth=1.
+- **Evenly-spaced input state matters.** Injecting photons as `round(i*m/k)` rather
+  than front-loading them (`[1,1,...,0,0]`) ensures all modes of the interferometer
+  are within the "light cone" of the input, preventing modes from being decorrelated
+  from the data encoding.

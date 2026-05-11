@@ -144,6 +144,7 @@ class QuantumClassifier(nn.Module):
         k: int,
         depth: int = 1,
         m_circuit: int | None = None,
+        n_features: int | None = None,
         parity_modes=None,
         init_scale: float = 0.01,
         use_bias: bool = False,
@@ -158,7 +159,8 @@ class QuantumClassifier(nn.Module):
             parity_modes = tuple(range((m + 1) // 2))
         self.parity_modes = tuple(parity_modes)
 
-        n_features = m - 1  # number of phase-encoded inputs (= dataset feature dim)
+        n_features = n_features if n_features is not None else m - 1
+        self.n_features = n_features
         m_c = self.m_circuit
 
         # Build the circuit directly with pcvl.GenericInterferometer.
@@ -217,16 +219,12 @@ class QuantumClassifier(nn.Module):
                 for j in range(n_features):
                     circuit.add(j, pcvl.PS(pcvl.P(f"x{d * n_features + j + 1}")))
 
-        # When m_circuit == m: keep photons bunched at the front, matching the
-        # teacher's input state.  When m_circuit > m: spread photons evenly so
-        # they sample more of the enlarged interferometer.
-        if m_c == m:
-            input_state = [1] * k + [0] * (m - k)
-        else:
-            input_state = _evenly_spaced_input_state(m_c, k)
+        # Spread photons evenly to cover the full interferometer light cone,
+        # matching the teacher's default_input_state in data.photonic_quantum.
+        input_state = _evenly_spaced_input_state(m_c, k)
 
         self.quantum_layer = ML.QuantumLayer(
-            input_size=(m - 1) * depth,
+            input_size=n_features * depth,
             circuit=circuit,
             input_state=input_state,
             trainable_parameters=trainable_prefixes,
@@ -267,7 +265,7 @@ class QuantumClassifier(nn.Module):
     def parity_expectation(self, x: torch.Tensor) -> torch.Tensor:
         """Continuous parity expectation ∈ [-1, +1], shape (B,)."""
         if self.depth > 1:
-            x_in = x.repeat(1, self.depth)  # (B, depth*(m-1))
+            x_in = x.repeat(1, self.depth)  # (B, depth*n_features)
         else:
             x_in = x
         probs = self.quantum_layer(x_in)          # (B, n_fock)
@@ -316,6 +314,7 @@ def train_and_eval_quantum(
     k: int,
     depth: int = 1,
     m_circuit: int | None = None,
+    n_features: int | None = None,
     epochs: int = 200,
     lr: float = 1e-2,
     batch_size: int = 64,
@@ -357,6 +356,7 @@ def train_and_eval_quantum(
 
     use_bias = (loss == "hloss")
     model = QuantumClassifier(m=m, k=k, depth=depth, m_circuit=m_circuit,
+                              n_features=n_features,
                               parity_modes=parity_modes, init_scale=0.05,
                               use_bias=use_bias)
     ce_criterion = nn.CrossEntropyLoss()
@@ -678,6 +678,9 @@ def find_min_depth(
     bail_threshold: float = 0.30,
     max_resample_iter: int = 10,
     early_stopping_patience: int = 60,
+    observable: str = "parity",
+    n_features: int | None = None,
+    nsample: int = 0,
 ) -> None:
     """Find the minimum (m_circuit, depth) configuration reaching the target accuracy.
 
@@ -695,12 +698,21 @@ def find_min_depth(
         raise ValueError(f"Unknown generator {generator!r}. Choose from {list(GENERATORS)}.")
 
     margin_str = f"  min_margin={min_margin}" if min_margin > 0.0 else ""
+    obs_str    = f"  observable={observable}" if generator == "photonic_quantum" else ""
+    nf_str     = f"  n_features={n_features}" if n_features is not None else ""
+    nshots_str = f"  nsample={nsample}" if nsample > 0 else ""
     print(f"Generating dataset  generator={generator}  m={m}  k={k}  size={dataset_size}"
-          f"  balanced={balanced}{margin_str} ...")
-    ds = GENERATORS[generator](size=dataset_size, m=m, k=k, seed=data_seed,
-                               balanced=balanced, min_margin=min_margin,
-                               bail_threshold=bail_threshold,
-                               max_iter=max_resample_iter)
+          f"  balanced={balanced}{margin_str}{obs_str}{nf_str}{nshots_str} ...")
+    gen_kwargs: dict = dict(size=dataset_size, m=m, k=k, seed=data_seed,
+                            balanced=balanced, min_margin=min_margin,
+                            bail_threshold=bail_threshold,
+                            max_iter=max_resample_iter,
+                            nsample=nsample)
+    if generator == "photonic_quantum":
+        gen_kwargs["observable"] = observable
+        if n_features is not None:
+            gen_kwargs["n_features"] = n_features
+    ds = GENERATORS[generator](**gen_kwargs)
 
     if loss == "mse" and ds.soft_targets is None:
         raise ValueError(
@@ -746,9 +758,12 @@ def find_min_depth(
         print(f"\n{'depth':>6}  {'params':>8}  {'accuracy':>10}")
         print("-" * 30)
 
+    eff_n_features = n_features if n_features is not None else m - 1
+
     def _n_params(depth: int, m_circuit: int) -> int:
         return QuantumClassifier(m=m, k=k, depth=depth,
-                                 m_circuit=m_circuit, parity_modes=parity_modes).n_trainable
+                                 m_circuit=m_circuit, n_features=eff_n_features,
+                                 parity_modes=parity_modes).n_trainable
 
     found = None
     for m_c in m_circuits:
@@ -756,6 +771,7 @@ def find_min_depth(
             acc, best_val, best_train = train_and_eval_quantum(
                 X_train, y_train, X_test, y_test,
                 m=m, k=k, depth=d, m_circuit=m_c,
+                n_features=eff_n_features,
                 epochs=epochs,
                 lr=lr,
                 batch_size=batch_size,

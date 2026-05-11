@@ -24,6 +24,7 @@ from data import GENERATORS
 from learner.mlp import find_min_hidden_size, HiddenLayerSpec
 from learner.photonic_quantum import find_min_depth
 from learner.qubit_quantum import find_min_qubit_depth
+from learner.svm import find_min_svm
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +37,7 @@ LEARNERS: dict[str, LearnerFn] = {
     "mlp":              find_min_hidden_size,
     "photonic_quantum": find_min_depth,
     "qubit_quantum":    find_min_qubit_depth,
+    "svm":              find_min_svm,
 }
 
 
@@ -131,6 +133,36 @@ if __name__ == "__main__":
         default=10,
         metavar="N",
         help="Max resample iterations after the first batch. Default 10.",
+    )
+
+    # --- svm-specific ---
+    svm_group = parser.add_argument_group("SVM learner options")
+    svm_group.add_argument(
+        "--C-values",
+        type=float,
+        nargs="+",
+        default=None,
+        metavar="C",
+        help=(
+            "SVM regularisation values to sweep (ascending). "
+            "Default: [0.01, 0.1, 1, 10, 100, 1000]."
+        ),
+    )
+    svm_group.add_argument(
+        "--svm-kernel",
+        default="rbf",
+        choices=["rbf", "linear", "poly", "sigmoid"],
+        help="SVM kernel type (default: rbf).",
+    )
+    svm_group.add_argument(
+        "--fourier-order",
+        type=int,
+        default=3,
+        metavar="F",
+        help=(
+            "Fourier expansion order applied to inputs before the SVM kernel. "
+            "0 = raw angle features. Default: 3 (yields sin/cos at frequencies 1–3)."
+        ),
     )
 
     # --- mlp-specific ---
@@ -283,6 +315,12 @@ if __name__ == "__main__":
                              bail_threshold=cli.bail_threshold,
                              max_resample_iter=cli.max_resample_iter,
                              early_stopping_patience=cli.early_stopping_patience)
+    elif cli.learner == "svm":
+        find_min_svm(**common, C_values=cli.C_values,
+                     kernel=cli.svm_kernel, fourier_order=cli.fourier_order,
+                     balanced=cli.balanced, min_margin=cli.min_margin,
+                     bail_threshold=cli.bail_threshold,
+                     max_resample_iter=cli.max_resample_iter)
     elif cli.learner == "qubit_quantum":
         find_min_qubit_depth(**common, depths=cli.depths,
                              optimizer_name=cli.optimizer,

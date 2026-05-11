@@ -111,6 +111,12 @@ python papers/quantum_feature_spaces/train.py \
   --m 6 --k 3 --balanced --min-margin 0.10 \
   --hidden-sizes 64 "64,64" "128,128"
 
+# SVM learner (RBF kernel + Fourier features) on quantum data
+python papers/quantum_feature_spaces/train.py \
+  --learner svm --generator photonic_quantum \
+  --m 6 --k 3 --balanced --min-margin 0.10 \
+  --C-values 0.1 1 10 100
+
 # Qubit learner on qubit-generated data (paper setting)
 python papers/quantum_feature_spaces/train.py \
   --learner qubit_quantum --generator qubit_quantum \
@@ -160,10 +166,13 @@ python papers/quantum_feature_spaces/train.py --learner LEARNER --generator GENE
 
 | Argument | Default | Description |
 |---|---|---|
-| `--learner` | `mlp` | `mlp`, `photonic_quantum`, or `qubit_quantum` |
+| `--learner` | `mlp` | `mlp`, `svm`, `photonic_quantum`, or `qubit_quantum` |
 | `--depths` | `[1,2,3]` | (quantum) List of interferometer depths to try |
 | `--sizes` | `[m]` | (photonic) List of circuit mode counts to try |
 | `--hidden-sizes` | — | (MLP) Hidden layer specs, e.g. `64 "64,64" "128,64,32"` |
+| `--C-values` | `[0.01,0.1,1,10,100,1000]` | (SVM) Regularisation values to sweep |
+| `--svm-kernel` | `rbf` | (SVM) Kernel type: `rbf`, `linear`, `poly`, `sigmoid` |
+| `--fourier-order` | `3` | (SVM) Fourier expansion order applied before the kernel (0 = raw) |
 
 ### Data generation
 

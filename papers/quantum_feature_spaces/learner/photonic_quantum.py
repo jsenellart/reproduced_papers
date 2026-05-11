@@ -72,14 +72,17 @@ def validate_teacher_params(
             W1_p = W1[:m_c, :m_c]
             W2_p = W2[:m_c, :m_c]
 
-        C1 = opt.optimize_rectangle(pcvl.Matrix(W1_p), allow_error=True)
-        C2 = opt.optimize_rectangle(pcvl.Matrix(W2_p), allow_error=True)
-        U1 = np.array(C1.compute_unitary())
-        U2 = np.array(C2.compute_unitary())
-        fid1 = (abs(np.trace(U1.conj().T @ W1_p)) / m_c) ** 2
-        fid2 = (abs(np.trace(U2.conj().T @ W2_p)) / m_c) ** 2
-        ok = "✓" if min(fid1, fid2) >= 0.999 else "✗ low"
-        print(f"  {m_c:>5}  {fid1:>10.6f}  {fid2:>10.6f}  {ok:>10}")
+        try:
+            C1 = opt.optimize_rectangle(pcvl.Matrix(W1_p), allow_error=True)
+            C2 = opt.optimize_rectangle(pcvl.Matrix(W2_p), allow_error=True)
+            U1 = np.array(C1.compute_unitary())
+            U2 = np.array(C2.compute_unitary())
+            fid1 = (abs(np.trace(U1.conj().T @ W1_p)) / m_c) ** 2
+            fid2 = (abs(np.trace(U2.conj().T @ W2_p)) / m_c) ** 2
+            ok = "✓" if min(fid1, fid2) >= 0.999 else "✗ low"
+            print(f"  {m_c:>5}  {fid1:>10.6f}  {fid2:>10.6f}  {ok:>10}")
+        except Exception as e:
+            print(f"  {m_c:>5}  {'n/a':>10}  {'n/a':>10}  {'⚠ err':>10}  ({e})")
 
 
 # ---------------------------------------------------------------------------

@@ -27,10 +27,13 @@ Four observables are supported (``observable`` argument):
     Related to Hong-Ou-Mandel interference and the boson-sampling permanent.
 
 ``"single_output"``
-    soft = P(output = input_state) − P(output = reversed_input_state),  label = sign.
+    soft = (P(output = input_state) − P(output = reversed_input_state)) / max_s P(s),
+    label = sign.
     Probes the probability of two specific Fock states: the injected input state
     and its mode-reversal.  Each probability is |perm(submatrix of U(x))|² —
     an interference term that can oscillate at high spatial frequency with x.
+    The difference is normalised by the highest output probability so that the
+    score stays O(1) as m and k grow (raw permanents shrink as 1/dim(Fock)).
     The difference is naturally centred near 0, giving balanced classes.
 
 This module provides:
@@ -147,12 +150,11 @@ def bunching_score_of_key(key) -> int:
 def single_output_score_of_key(key, input_state: list[int]) -> int:
     """Return +1 if key matches input_state, −1 if it matches reversed input_state, else 0.
 
-    Designed for the ``"single_output"`` observable:
-        soft = P(output = input_state) − P(output = reversed_input_state)
+    Defines the unnormalised score_vec for the ``"single_output"`` observable.
     Only two Fock states carry non-zero weight; all others contribute 0.
-    Each probability is |perm(submatrix of U(x))|², which can oscillate at
-    high spatial frequency — potentially producing finer decision boundaries
-    than the aggregate parity/majority/bunching observables.
+    The raw dot product probs @ score_vec = P(A) − P(B) is then divided by
+    max_s P(s) inside ``generate_photonic_quantum`` to keep the score O(1)
+    as the Fock-space dimension grows with m and k.
     """
     key_list = [int(key[i]) for i in range(len(input_state))]
     if key_list == list(input_state):
@@ -324,6 +326,12 @@ def generate_photonic_quantum(
         Xb = 2.0 * np.pi * torch.rand(n, n_features, dtype=dtype, device=device)
         probs = layer.forward(Xb, shots=nsample if nsample > 0 else None)
         score = probs @ score_vec
+        if observable == "single_output":
+            # P(A) and P(B) shrink as 1/dim(Fock) with m and k, making the raw
+            # difference exponentially small and min_margin meaningless.
+            # Normalising by max_s P(s) gives a scale-invariant score in [-1,+1]
+            # that stays O(1) regardless of circuit size.
+            score = score / probs.max(dim=1).values.clamp(min=1e-10)
         yb = (score >= 0).to(torch.long)
         return Xb, yb, score, score.abs()
 

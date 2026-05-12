@@ -324,7 +324,7 @@ Key options:
 
 ### Photonic observable comparison: `plot_photonic_observables.py`
 
-Compares parity / majority / bunching observables across multiple (m, k) configs.
+Compares parity / majority / bunching / single_output observables across multiple (m, k) configs.
 
 ```bash
 # 2D direct, three (m,k) configurations

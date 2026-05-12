@@ -340,18 +340,3 @@ python papers/quantum_feature_spaces/plot_photonic_observables.py \
 
 ## Key findings
 
-- **Depth is the dominant capacity factor** for photonic learners: depth 1–2
-  plateaus around 73–82%, depth 3–4 unlocks 85–90%+.
-- **Circuit size (m_circuit) matters most at high depth.** At depth=4:
-  m=6 → 85%, m=8 → 88%, m=10 → 90% for the quantum/quantum cell.
-- **`mse` loss (soft regression) is much stronger than `hloss`** when the
-  generator provides continuous parity targets. At m=6, depth=1:
-  `mse` reaches 100% while `hloss` plateaus at ~73%.
-- **`min_margin` is critical for photonic data (and probably others).** Without filtering,
-  ~63% of samples lie near the decision boundary and dominate the loss
-  with near-zero gradient signal. Setting `min_margin=0.10` (≈1.4σ)
-  makes the problem cleanly learnable at depth=1.
-- **Evenly-spaced input state matters.** Injecting photons as `round(i*m/k)` rather
-  than front-loading them (`[1,1,...,0,0]`) ensures all modes of the interferometer
-  are within the "light cone" of the input, preventing modes from being decorrelated
-  from the data encoding.

@@ -37,17 +37,17 @@ This benchmark addresses both gaps by:
 - Measuring the **minimum model size** to reach 90% rather than reporting a single
   accuracy on a hand-picked setting.
 
-The original is qubit-based. We extend it to a **4 × 3 cross-evaluation grid**:
+The original is qubit-based. We extend it to a **4 × 4 cross-evaluation grid**:
 
 ```
-                          ┌─────────────── learner ───────────────┐
-                          │  MLP    Photonic-quantum  Qubit-quantum│
-   ┌──────────────────────┼───────────────────────────────────────┤
-g  │ photonic_quantum     │   ●       photonic Havlíček    ●      │
-e  │ qubit_quantum        │   ●              ●         paper setup │
-n  │ analytical           │   ●              ●              ●     │
-   │ mlp                  │ self-dist.        ●              ●     │
-   └──────────────────────┴───────────────────────────────────────┘
+                          ┌──────────────────────── learner ────────────────────────┐
+                          │  MLP      SVM      Photonic-quantum  Qubit-quantum       │
+   ┌──────────────────────┼──────────────────────────────────────────────────────────┤
+g  │ photonic_quantum     │   ●        ●       photonic Havlíček         ●           │
+e  │ qubit_quantum        │   ●        ●               ●             paper setup     │
+n  │ analytical           │   ●        ●               ●                 ●           │
+   │ mlp                  │ self-dist. ●               ●                 ●           │
+   └──────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
 Diagonal cells are sanity checks (each architecture learns its own teacher's decision boundary).
